@@ -22,13 +22,6 @@ import cv2
 import pyaudio
 import logging
 import random
-
-# 设置日志的配置信息
-logging.basicConfig(level=logging.INFO)
-
-objs = [labels_dict[i] for i in [0,1,2,3,4,5,6,7,8,9,10,11,12,13,56,57,58,59,60,61,62,63,67,68,72,73]]
-
-
 import sys
 import socket
 import threading
@@ -45,6 +38,12 @@ from PyQt5.QtCore import pyqtSignal, QThread, Qt
 from PyQt5.QtGui import QPixmap, QImage
 import logging
 
+# 设置日志的配置信息
+logging.basicConfig(level=logging.INFO)
+
+objs = [labels_dict[i] for i in
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 56, 57, 58, 59, 60, 61, 62, 63, 67, 68, 72, 73]]
+
 # 设置服务器参数
 HOST = '127.0.0.1'
 PORT = 65432
@@ -53,6 +52,7 @@ PORT = 65432
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.bind((HOST, PORT))
 server_socket.listen()
+
 
 class ServerThread(QThread):
     update_signal = pyqtSignal(str, np.ndarray, float, float, float)
@@ -102,7 +102,7 @@ class ServerThread(QThread):
 
                     t3 = time.time()
 
-                    self.update_signal.emit(f"Received data from {addr}", rgb_image, t1-t0, t2-t1, t3-t2)
+                    self.update_signal.emit(f"Received data from {addr}", rgb_image, t1 - t0, t2 - t1, t3 - t2)
             except Exception as e:
                 self.log_signal.emit(f"Error with {addr}: {e}")
                 break
@@ -197,7 +197,8 @@ class ServerApp(QMainWindow):
 
     def update_display(self, log_message, image, time1, time2, time3):
         self.log_text.append(log_message)
-        cv2.putText(image, f"{int(time1 * 1000)}ms+{int(time2 * 1000)}ms+{int(time3 * 1000)}ms", (0, 30), cv2.FONT_HERSHEY_TRIPLEX, 0.8,
+        cv2.putText(image, f"{int(time1 * 1000)}ms+{int(time2 * 1000)}ms+{int(time3 * 1000)}ms", (0, 30),
+                    cv2.FONT_HERSHEY_TRIPLEX, 0.8,
                     (0, 0, 255))
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb_image.shape
@@ -401,6 +402,7 @@ class SecondWindow(QWidget):
         if self.clicked_btn_run_is_clicked:
             self.btn_run.setStyleSheet("QPushButton {background-color: #8DBF8B;}")
             QApplication.processEvents()
+
             def generate_random_color(seed=None):
                 """生成并返回一个随机颜色"""
                 random.seed(seed)  # 设置随机数种子
@@ -718,7 +720,6 @@ class SecondWindow(QWidget):
             self.signal_clean_textEdit_terminal.emit()
             QApplication.processEvents()
 
-
     def clicked_btn_play_3D_audio(self):
         self.clicked_btn_play_3D_audio_is_clicked = ~self.clicked_btn_play_3D_audio_is_clicked
         if self.clicked_btn_play_3D_audio_is_clicked and self.clicked_btn_run_is_clicked:
@@ -1021,7 +1022,6 @@ class cloud_service_window(QWidget):
                         cv2.line(BEV, center, (int(up_right[0] + 0.5) + center[0], -int(up_right[1] + 0.5) + center[1]),
                                  (79, 160, 39), 3)  # 右上角
 
-
                         # 发送图像并接收结果
                         received_data = await send_images(img_BGR)
 
@@ -1317,13 +1317,13 @@ class cloud_service_window(QWidget):
         time.sleep(1)
         self.btn_stop.setStyleSheet("QPushButton {}")
 
-
     def closeEvent(self, event):
         self.threads_running = False
         self.windowClosed.emit()
         if self.ServerApp is not None:
             self.ServerApp.close()
         event.accept()
+
 
 class Window(QMainWindow):
     signal_update_label_L_MONO = pyqtSignal(QPixmap)
@@ -1362,7 +1362,7 @@ class Window(QMainWindow):
         self.setFixedSize(1600, 900)
         self.setWindowTitle("[后台界面] 基于视觉环境感知的视障人士出行导航系统 V1.0")
         # self.current_address = [116.349594, 40.042233]
-        self.current_address = [117.204424,31.769715]
+        self.current_address = [117.204424, 31.769715]
 
         self.label_L_MONO = QLabel(self)
         self.label_L_MONO.setGeometry(10, 10, 320, 200)  # x, y, width, height
@@ -1484,10 +1484,13 @@ class Window(QMainWindow):
 
         self.signal_update_label_Perception.connect(self.label_Perception.setPixmap)
         self.signal_update_label_BEV.connect(self.label_BEV.setPixmap)
-        self.signal_clean_label_Perception_BEV.connect(lambda: self.label_Perception.setText("Visual Environmental Perception"))
-        self.signal_clean_label_Perception_BEV.connect(lambda: self.label_Perception.setStyleSheet("background-color: #FAF5E4;"))
+        self.signal_clean_label_Perception_BEV.connect(
+            lambda: self.label_Perception.setText("Visual Environmental Perception"))
+        self.signal_clean_label_Perception_BEV.connect(
+            lambda: self.label_Perception.setStyleSheet("background-color: #FAF5E4;"))
         self.signal_clean_label_Perception_BEV.connect(lambda: self.label_BEV.setText("BEV (Bird's-eye view)"))
-        self.signal_clean_label_Perception_BEV.connect(lambda: self.label_BEV.setStyleSheet("background-color: #FAF5E4;"))
+        self.signal_clean_label_Perception_BEV.connect(
+            lambda: self.label_BEV.setStyleSheet("background-color: #FAF5E4;"))
 
         self.signal_update_lineEdit_navigation_destination.connect(
             lambda text: self.lineEdit_navigation_destination.setText(f"{text}"))
@@ -1916,24 +1919,24 @@ class Window(QMainWindow):
             self.btn_system_run_is_clicked = True
 
     def clicked_btn_system_stop(self):
-            self.btn_system_stop_is_clicked = True
-            self.system_pause = True
-            self.btn_system_stop.setStyleSheet("QPushButton {background-color: #E04255;}")
-            self.btn_open_cam.setStyleSheet("QPushButton {}")
-            self.btn_open_depth.setStyleSheet("QPushButton {}")
-            self.btn_open_pose.setStyleSheet("QPushButton {}")
-            self.btn_system_run.setStyleSheet("QPushButton {}")
-            self.btn_system_stop.setText("stopping")
-            QApplication.processEvents()
-            time.sleep(1)
-            self.btn_system_stop.setStyleSheet("QPushButton {}")
-            self.system_pause = False
-            self.btn_system_stop_is_clicked = False
-            self.btn_system_run_is_clicked = False
-            self.btn_open_cam_is_clicked = False
-            self.btn_open_depth_is_clicked = False
-            self.btn_open_pose_is_clicked = False
-            self.btn_system_stop.setText("STOP")
+        self.btn_system_stop_is_clicked = True
+        self.system_pause = True
+        self.btn_system_stop.setStyleSheet("QPushButton {background-color: #E04255;}")
+        self.btn_open_cam.setStyleSheet("QPushButton {}")
+        self.btn_open_depth.setStyleSheet("QPushButton {}")
+        self.btn_open_pose.setStyleSheet("QPushButton {}")
+        self.btn_system_run.setStyleSheet("QPushButton {}")
+        self.btn_system_stop.setText("stopping")
+        QApplication.processEvents()
+        time.sleep(1)
+        self.btn_system_stop.setStyleSheet("QPushButton {}")
+        self.system_pause = False
+        self.btn_system_stop_is_clicked = False
+        self.btn_system_run_is_clicked = False
+        self.btn_open_cam_is_clicked = False
+        self.btn_open_depth_is_clicked = False
+        self.btn_open_pose_is_clicked = False
+        self.btn_system_stop.setText("STOP")
 
     def thread_update_frame_cams(self):
         while self.threads_running:
@@ -2019,7 +2022,8 @@ class Window(QMainWindow):
             background = np.zeros((80, 160, 3), np.uint8)
             center = (80, 40)
             self.imu = self.msgGrp['imu'].packets[0]
-            self.Quaternion = Quaternion(self.imu.rotationVector.real, self.imu.rotationVector.i, self.imu.rotationVector.j,
+            self.Quaternion = Quaternion(self.imu.rotationVector.real, self.imu.rotationVector.i,
+                                         self.imu.rotationVector.j,
                                          self.imu.rotationVector.k)
 
             down_left = self.Quaternion.rotate(
@@ -2179,21 +2183,23 @@ class Window(QMainWindow):
                     box = np.intp(box)
                     cv2.drawContours(BEV, [box], 0, color, 2)
 
-                    cv2.putText(perception_background, f"{name} {np.median(selected_distances):.1f}mm", (bbox[0], bbox[1] + 10),
+                    cv2.putText(perception_background, f"{name} {np.median(selected_distances):.1f}mm",
+                                (bbox[0], bbox[1] + 10),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, color)
 
             perception_background = cv2.cvtColor(perception_background, cv2.COLOR_BGR2RGB)
             height, width, channel = perception_background.shape  # 例如 360, 640
             q_img = QImage(perception_background.data, width, height, channel * width, QImage.Format_RGB888)
             pixmap = QPixmap.fromImage(q_img)
-            scaled_pixmap_label_Perception = pixmap.scaled(self.label_Perception.width(), self.label_Perception.height(),
-                                          Qt.KeepAspectRatio)
+            scaled_pixmap_label_Perception = pixmap.scaled(self.label_Perception.width(),
+                                                           self.label_Perception.height(),
+                                                           Qt.KeepAspectRatio)
             BEV = cv2.cvtColor(BEV, cv2.COLOR_BGR2RGB)
             height, width, channel = BEV.shape  # 例如 360, 640
             q_img = QImage(BEV.data, width, height, channel * width, QImage.Format_RGB888)
             pixmap = QPixmap.fromImage(q_img)
             scaled_pixmap_label_BEV = pixmap.scaled(self.label_BEV.width(), self.label_BEV.height(),
-                                          Qt.KeepAspectRatio)
+                                                    Qt.KeepAspectRatio)
             # self.label_Perception.setPixmap(scaled_pixmap_label_Perception)
             # self.label_BEV.setPixmap(scaled_pixmap_label_BEV)
             self.signal_update_label_Perception.emit(scaled_pixmap_label_Perception)
@@ -2241,7 +2247,6 @@ class Window(QMainWindow):
             self.signal_update_textEdit_terminal.emit(f"无法连接到 Google Web Speech API 服务; {e}")
             self.signal_back_lineEdit_navigation_destination.emit()
         self.frames.clear()
-
 
     def closeEvent(self, event):
         self.threads_running = False  # 关闭窗口时将 running 设置为 False

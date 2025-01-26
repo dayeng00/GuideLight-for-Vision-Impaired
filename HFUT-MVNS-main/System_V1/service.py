@@ -16,6 +16,7 @@ server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.bind((HOST, PORT))
 server_socket.listen()
 
+
 async def handle_client(client_socket, addr):
     print(f"Connected by {addr}")
     road_model = RoadBoundGetter(scale=0.3, density=10, pretrain="utils/road_model_maxmIOU75.pth")
@@ -53,11 +54,13 @@ async def handle_client(client_socket, addr):
     print(f"Connection closed by {addr}")
     client_socket.close()
 
+
 async def accept_clients():
     loop = asyncio.get_event_loop()
     while True:
         client_socket, addr = await loop.sock_accept(server_socket)
         asyncio.create_task(handle_client(client_socket, addr))
+
 
 print("Server is listening...")
 

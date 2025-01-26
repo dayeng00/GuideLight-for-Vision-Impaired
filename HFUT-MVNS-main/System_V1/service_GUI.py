@@ -23,6 +23,7 @@ server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.bind((HOST, PORT))
 server_socket.listen()
 
+
 class ServerThread(QThread):
     update_signal = pyqtSignal(str, np.ndarray, float, float, float)
     log_signal = pyqtSignal(str)
@@ -71,7 +72,7 @@ class ServerThread(QThread):
 
                     t3 = time.time()
 
-                    self.update_signal.emit(f"Received data from {addr}", rgb_image, t1-t0, t2-t1, t3-t2)
+                    self.update_signal.emit(f"Received data from {addr}", rgb_image, t1 - t0, t2 - t1, t3 - t2)
             except Exception as e:
                 self.log_signal.emit(f"Error with {addr}: {e}")
                 break
@@ -97,6 +98,7 @@ class ServerThread(QThread):
             self.pause_cond.notify_all()
         self.log_signal.emit("Server resumed")
 
+
 class LogHandler(logging.Handler):
     def __init__(self, log_widget):
         super().__init__()
@@ -105,6 +107,7 @@ class LogHandler(logging.Handler):
     def emit(self, record):
         msg = self.format(record)
         self.log_widget.append(msg)
+
 
 class ServerApp(QMainWindow):
     def __init__(self):
@@ -164,7 +167,8 @@ class ServerApp(QMainWindow):
 
     def update_display(self, log_message, image, time1, time2, time3):
         self.log_text.append(log_message)
-        cv2.putText(image, f"{int(time1 * 1000)}ms+{int(time2 * 1000)}ms+{int(time3 * 1000)}ms", (0, 30), cv2.FONT_HERSHEY_TRIPLEX, 0.8,
+        cv2.putText(image, f"{int(time1 * 1000)}ms+{int(time2 * 1000)}ms+{int(time3 * 1000)}ms", (0, 30),
+                    cv2.FONT_HERSHEY_TRIPLEX, 0.8,
                     (0, 0, 255))
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb_image.shape
@@ -178,6 +182,7 @@ class ServerApp(QMainWindow):
     def reset_image_label(self):
         self.image_label.setStyleSheet("background-color: #FAF5E4;")
         self.image_label.setText("RGB Data")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

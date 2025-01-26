@@ -22,7 +22,7 @@ def generate_random_color(seed=None):
     red = random.randint(0, 255)
     green = random.randint(0, 255)
     blue = random.randint(0, 255)
-    return (red, green, blue)
+    return red, green, blue
 
 
 async def send_images(rgb_image, depth_image):

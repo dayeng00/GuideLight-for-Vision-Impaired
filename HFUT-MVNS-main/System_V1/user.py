@@ -1,44 +1,21 @@
-import sys
-import os
-import time
-
-from pocketsphinx import AudioFile
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
-from PyQt5.QtWebEngineWidgets import *
-from utils.OAK_Info import oak_device
-from ultralytics import YOLO
-import speech_recognition as sr
-from scipy.spatial.transform import Rotation as R
-import pyaudio
-
-import threading
-import numpy as np
-import depthai as dai
-import requests
-import cv2
-import math
-import sys
-import time
-
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
-from PyQt5.QtWebEngineWidgets import *
-from utils.OAK_Info import oak_device
-from utils.models import RoadBoundGetter
-import sounddevice as sd
-from utils.tools import *
-import numpy as np
-from ultralytics import YOLO
-import librosa
-import threading
-import cv2
 import logging
-import random
+import sys
+import threading
+import time
+
+import librosa
+import numpy as np
+import pyaudio
+import sounddevice as sd
+import speech_recognition as sr
+from PyQt5.QtCore import *
+from PyQt5.QtWebEngineWidgets import *
+from PyQt5.QtWidgets import *
 from scipy.spatial.transform import Rotation as R
-import matplotlib.pyplot as plt
+from ultralytics import YOLO
+
+from utils.OAK_Info import oak_device
+from utils.tools import *
 
 objs = [labels_dict[i] for i in
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 56, 57, 58, 59, 60, 61, 62, 63, 67, 68, 72, 73]]

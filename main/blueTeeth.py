@@ -39,6 +39,7 @@ class BluetoothAudioPlayer:
         self.find_bluetooth_device()
 
         # 遍历搜索到的设备
+        # bdaddr 是 “Bluetooth Device Address” 的缩写 即蓝牙设备地址
         for bdaddr in self.nearby_devices:
             # 获取设备名称并与目标设备名称比较
             if self.target_device_name == bluetooth.lookup_name(bdaddr):
@@ -59,6 +60,10 @@ class BluetoothAudioPlayer:
             print(f"未找到设备: {self.target_device_name}")
         return False
 
+    '''
+    A2DP（Advanced Audio Distribution Profile）
+    音频流是一种用于在蓝牙设备之间传输高质量立体声音频的技术规范
+    '''
     def play_mp3_file(self, file_path):
         # 如果需要中断当前播放且正在播放音频
         if self.interrupt_playing and self.is_playing:

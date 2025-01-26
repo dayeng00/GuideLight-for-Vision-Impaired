@@ -1,13 +1,19 @@
-import time
+"""
+这段代码实现了一个基于头相关传输函数（HRTF）的三维音频可视化交互程序。
+用户可以通过鼠标在鸟瞰图（BEV）上点击或拖动来指定声源的位置，
+程序会根据该位置计算出相应的距离、方位角和俯仰角，并利用 HRTF 对音频信号进行处理，
+模拟出三维音效。同时，程序还会实时绘制处理后的音频波形图，并将其嵌入到 BEV 中显示。
+"""
 
-import numpy as np
-import sounddevice as sd
-from pysofaconventions import SOFAFile
-from scipy.signal import fftconvolve
-import librosa
-import cv2
-import time
-import threading
+import cv2  # 用于图像显示和鼠标交互。
+import librosa  # 用于音频文件的加载。
+import numpy as np  # 用于数值计算。
+import sounddevice as sd  # 用于音频播放。
+from pysofaconventions import SOFAFile  # 用于读取和处理 SOFA 文件，SOFA 文件包含 HRTF 数据。
+from scipy.signal import fftconvolve  # 用于音频信号的卷积操作。
+
+# matplotlib.pyplot：用于绘制音频波形图。
+# matplotlib.backends.backend_agg.FigureCanvasAgg：用于将 matplotlib 图形转换为图像。
 
 click_pos = None
 mouse_pressed = False  # 用于跟踪鼠标按键是否被按下
@@ -18,6 +24,7 @@ current_position = 0
 
 
 def calculate_distance_and_angle(x, y):
+    """该函数根据鼠标点击的坐标计算声源的距离、方位角和俯仰角。"""
     dx = x - 500
     dy = 500 - y  # 注意坐标系的方向，图像的y轴是向下的
     distance = np.sqrt(dx ** 2 + dy ** 2)
@@ -28,6 +35,10 @@ def calculate_distance_and_angle(x, y):
 
 
 def mouse_callback(event, x, y, flags, param):
+    """
+    该函数是鼠标回调函数，用于处理鼠标事件。当鼠标左键按下、移动或释放时，更新相应的全局变量，
+    并在 BEV 上显示鼠标位置和计算得到的距离、方位角和俯仰角。
+    """
     global click_pos, BEV, mouse_pressed, distance, azimuth_angle, pitch_angle
     if event == cv2.EVENT_LBUTTONDOWN:
         mouse_pressed = True
@@ -47,6 +58,9 @@ def mouse_callback(event, x, y, flags, param):
 
 
 def background():
+    """
+    该函数用于创建 BEV 的背景图像，包括中心圆点、同心圆和垂直线。
+    """
     BEV = np.ones((1001, 1001, 3), np.uint8) * 255
     cv2.circle(BEV, (500, 500), 5, (0, 0, 255), -1)
     cv2.circle(BEV, (500, 500), 100, (0, 0, 255), 1)
@@ -57,12 +71,18 @@ def background():
 
 class HRFT():
     def __init__(self, sofa_path):
+        """
+        初始化 HRFT 类，加载 SOFA 文件并获取所有测量位置。
+        """
         # 加载SOFA文件和HRTF数据
         self.sofa = SOFAFile(sofa_path, 'r')
         # 获取SOFA文件中的所有测量位置
         self.positions = self.sofa.getVariableValue('SourcePosition')
 
     def get_LR_HRFT(self, pitch_angle, azimuth_angle):
+        """
+        根据给定的方位角和俯仰角，找到最接近的 HRTF 数据，并返回左右声道的 HRTF。
+        """
         closest_index = np.argmin(
             np.sqrt((self.positions[:, 0] - azimuth_angle) ** 2 + (self.positions[:, 1] - pitch_angle) ** 2))
         hrtf_left = self.sofa.getDataIR()[closest_index, 0, :]
@@ -71,6 +91,13 @@ class HRFT():
         return hrtf_left, hrtf_right
 
     def run(self, azimuth=0, elevation=0, c=(0, 0, 0.1)):
+        """
+        根据给定的方位角、俯仰角和波形参数，生成相应的音频信号，并使用 HRTF 进行卷积处理，返回处理后的立体声信号。
+        :param azimuth:
+        :param elevation:
+        :param c:
+        :return:
+        """
         # 找到与目标角度最接近的HRTF
         distances = np.sqrt((self.positions[:, 0] - azimuth) ** 2 + (self.positions[:, 1] - elevation) ** 2)
         closest_index = np.argmin(
@@ -173,6 +200,7 @@ def play_audio(waves, window_length=1024):
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
+
 def A():
     global stereo_signal
     x = y = click_pos
@@ -224,4 +252,5 @@ def A():
     plt.show()
 
 
-A()
+if __name__ == "__main__":
+    A()
