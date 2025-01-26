@@ -21,12 +21,15 @@ def recvall(sock, count):
         count -= len(newbuf)
     return buf
 
+
 """
  创建一个socket并绑定到指定的IP地址和端口。
  监听连接，并在接收到连接请求时接受连接。
  循环接收RGB图像和深度图像的数据，并解码成图像。
  调用run.go()函数，将接收到的RGB图像和深度图像传递给该函数进行处理。
 """
+
+
 def s():
     print('This is HOST!')
     address = ('192.168.31.54', 8080)
@@ -52,6 +55,7 @@ def s():
 
             run.go(decimg_RGB, depth)
             cv2.waitKey(1)
+
 
 # 在Python中，if __name__ == '__main__': 是一个常见的用法，用于判断当前模块是否作为主程序执行
 if __name__ == '__main__':

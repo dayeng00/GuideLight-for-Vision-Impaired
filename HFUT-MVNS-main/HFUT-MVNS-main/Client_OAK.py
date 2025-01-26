@@ -144,7 +144,7 @@ if __name__ == '__main__':
 
         sync = HostSync()
         # TCP连接
-        address = ('172.16.36.120', 8888)
+        address = ('127.0.0.1', 8888)
         # 3.tcp.cpolar.top 11670
         try:
             # 建立socket对象，参数意义见https://blog.csdn.net/rebelqsp/article/details/22109925

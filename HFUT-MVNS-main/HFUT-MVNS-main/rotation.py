@@ -26,7 +26,7 @@ imu.setBatchReportThreshold(1)
 imu.setMaxBatchReports(10)
 imu.out.link(xlinkOut.input)
 
-# imu.enableFirmwareUpdate(True)
+imu.enableFirmwareUpdate(True)
 
 with dai.Device(pipeline) as device:
 
