@@ -76,15 +76,8 @@ stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)  # 
 stereo.setDepthAlign(dai.CameraBoardSocket.RGB)  # 将深度图对齐到RGB摄像头的视角
 stereo.setOutputSize(monoLeft.getResolutionWidth(), monoLeft.getResolutionHeight())  # 设置输出大小与单目摄像头一致
 
-# 接下来，我们需要创建一个神经网络来生成检测结果
-detection_nn = pipeline.createMobileNetDetectionNetwork()
-# 这里使用blobconverter工具从OpenVINO模型库自动下载并编译MobileNetSSD模型
-detection_nn.setBlobPath(blobconverter.from_zoo(name='mobilenet-ssd', shaves=6))
-# 设置神经网络的置信度阈值，置信度值在0到1之间
-detection_nn.setConfidenceThreshold(0.5)
-
 # 设置空间检测网络属性
-spatialDetectionNetwork.setBlobPath(args.nnPath)  # 设置神经网络模型路径
+spatialDetectionNetwork.setBlobPath(blobconverter.from_zoo(name='mobilenet-ssd', shaves=6))  # 设置神经网络模型路径
 spatialDetectionNetwork.setConfidenceThreshold(0.5)  # 设置置信度阈值
 spatialDetectionNetwork.input.setBlocking(False)  # 设置输入为非阻塞模式
 spatialDetectionNetwork.setBoundingBoxScaleFactor(0.5)  # 设置边界框缩放因子
