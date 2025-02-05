@@ -1,8 +1,14 @@
-import time
+"""
+蓝牙耳机通常遵循 A2DP（Advanced Audio Distribution Profile）协议来接收音频流，
+PyBluez 本身并不直接支持 A2DP 协议，它主要用于 RFCOMM 连接（用于串行数据传输），
+因此此脚本已经废弃 无法正常运行
+思路改为模拟3D音频的声音后使用电脑连接蓝牙耳机播放 从而进行蓝牙耳机3D音频效果的模拟
+"""
 
+import time
 import bluetooth
 from pydub import AudioSegment  # 音频处理库
-from pydub.playback import play
+import subprocess
 import threading
 
 
@@ -20,38 +26,49 @@ class BluetoothAudioPlayer:
         self.audio_format = audio_format
         # 存储周围发现的蓝牙设备
         self.nearby_devices = None
+        # 存储蓝牙连接的 Socket
+        self.socket = None
+        # 存储目标蓝牙设备的地址
+        self.target_address = None
 
     def find_bluetooth_device(self):
         print("正在寻找附近可连接的蓝牙设备...")
-        self.nearby_devices = bluetooth.discover_devices(duration=8, lookup_names=True,
-                                                    flush_cache=True, lookup_class=False)
-        print("发现{}个可连接的设备:".format(len(self.nearby_devices)))
-        for addr, name in self.nearby_devices:
-            try:
-                print("   {} - {}".format(addr, name))
-            except UnicodeEncodeError:
-                print("   {} - {}".format(addr, name.encode("utf-8", "replace")))
+        try:
+            self.nearby_devices = bluetooth.discover_devices(duration=8, lookup_names=True,
+                                                             flush_cache=True, lookup_class=False)
+            print("发现{}个可连接的设备:".format(len(self.nearby_devices)))
+            for addr, name in self.nearby_devices:
+                try:
+                    print("   {} - {}".format(addr, name))
+                except UnicodeEncodeError:
+                    print("   {} - {}".format(addr, name.encode("utf-8", "replace")))
+        except bluetooth.btcommon.BluetoothError as err:
+            print(f"搜索蓝牙设备时出错: {err}")
 
     def connect_to_bluetooth_device(self):
         # 用于存储目标蓝牙设备的地址，初始值为 None
-        target_address = None
+        self.target_address = None
         # 搜索附近的蓝牙设备
         self.find_bluetooth_device()
 
         # 遍历搜索到的设备
         # bdaddr 是 “Bluetooth Device Address” 的缩写 即蓝牙设备地址
-        for bdaddr in self.nearby_devices:
+        for addr, name in self.nearby_devices:
             # 获取设备名称并与目标设备名称比较
-            if self.target_device_name == bluetooth.lookup_name(bdaddr):
+            if name == self.target_device_name:
                 # 找到目标设备，记录其地址
-                target_address = bdaddr
+                self.target_address = addr
                 break
 
         # 如果找到目标设备地址
-        if target_address is not None:
-            print(f"已找到设备: {self.target_device_name}，地址: {target_address}")
+        if self.target_address is not None:
+            print(f"已找到设备: {self.target_device_name}，地址: {self.target_address}")
             try:
                 print(f"正在尝试连接到 {self.target_device_name}...")
+                # 创建蓝牙套接字
+                self.socket = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
+                # 连接到设备
+                self.socket.connect((self.target_address, 1))  # 1 是 RFCOMM 端口号
                 print(f"已成功连接到 {self.target_device_name}")
                 return True
             except bluetooth.btcommon.BluetoothError as err:
@@ -60,10 +77,20 @@ class BluetoothAudioPlayer:
             print(f"未找到设备: {self.target_device_name}")
         return False
 
-    '''
-    A2DP（Advanced Audio Distribution Profile）
-    音频流是一种用于在蓝牙设备之间传输高质量立体声音频的技术规范
-    '''
+    # 关闭蓝牙连接
+    def close_bluetooth_device(self):
+        if self.socket:
+            try:
+                self.socket.close()
+                print("蓝牙连接已关闭。")
+            except bluetooth.btcommon.BluetoothError as err:
+                print(f"关闭蓝牙连接时出错: {err}")
+        else:
+            print("没有活动的蓝牙连接。")
+
+    # 蓝牙耳机通常遵循 A2DP（Advanced Audio Distribution Profile）协议来接收音频流，
+    # PyBluez 本身并不直接支持 A2DP 协议，它主要用于 RFCOMM 连接（用于串行数据传输），
+    # 但我们可以借助一些其他库（如 bluez 的命令行工具）来模拟音频流的传输。
     def play_mp3_file(self, file_path):
         # 如果需要中断当前播放且正在播放音频
         if self.interrupt_playing and self.is_playing:
@@ -92,28 +119,42 @@ class BluetoothAudioPlayer:
             else:
                 raise ValueError(f"不支持的音频格式: {self.audio_format}")
 
-            self.is_playing = True
+            # 将音频转换为 PCM 格式
+            pcm_data = sound.raw_data
 
-            def play_audio():
-                while self.is_playing:
-                    for chunk in sound[::100]:
-                        if not self.is_playing:
-                            break
-                        play(chunk)
-                self.is_playing = False
-                print("播放完成")
+            def send_audio():
+                self.is_playing = True
+                try:
+                    # 这里模拟将音频数据通过蓝牙套接字发送
+                    # 实际中，需要使用支持 A2DP 的方式进行音频流传输
+                    # 这里使用 bluez 的 pacat 命令结合蓝牙设备地址来模拟音频流传输
+                    command = f'pacat --rate=44100 --channels=2 --format=s16le --device=bluez_sink.{self.target_address.replace(":", "_")}.a2dp_sink'
+                    process = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE)
+                    process.stdin.write(pcm_data)
+                    process.stdin.close()
+                    process.wait()
+                except Exception as e:
+                    print(f"发送音频数据时出错: {e}")
+                finally:
+                    self.is_playing = False
+                    print("播放完成")
 
-            self.play_thread = threading.Thread(target=play_audio)
+            self.play_thread = threading.Thread(target=send_audio)
             self.play_thread.start()
         except Exception as err:
             print(f"播放文件时出错: {err}")
 
 
 if __name__ == "__main__":
-    # 创建 BluetoothAudioPlayer 类的实例，设置中断播放为 True，音频格式为 wav
+    # 创建 BluetoothAudioPlayer 类的实例，设置中断播放为 True，音频格式为 mp3
     player = BluetoothAudioPlayer("NANK-OE Mix", interrupt_playing=True, audio_format="mp3")
     if player.connect_to_bluetooth_device():
-        player.find_bluetooth_device()
-        player.play_mp3_file(r"D:\bin\pycharm\GuideLight-for-Vision-Impaired\flowerAllOpened.mp3")
-        time.sleep(10)
-        player.play_mp3_file(r"../flowerAllOpened.mp3")
+        try:
+            player.play_mp3_file(r"D:\bin\pycharm\GuideLight-for-Vision-Impaired\flowerAllOpened.mp3")
+            time.sleep(10)
+            player.play_mp3_file(r"../flowerAllOpened.mp3")
+        except Exception as e:
+            print(f"播放过程中出现错误: {e}")
+        finally:
+            # 确保在程序结束时关闭蓝牙连接
+            player.close_bluetooth_device()

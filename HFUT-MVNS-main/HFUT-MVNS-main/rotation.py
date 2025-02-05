@@ -16,7 +16,6 @@ from matplotlib import animation
 from mpl_toolkits.mplot3d import Axes3D
 
 
-
 pipeline = dai.Pipeline()
 imu = pipeline.create(dai.node.IMU)
 xlinkOut = pipeline.create(dai.node.XLinkOut)
@@ -26,7 +25,7 @@ imu.setBatchReportThreshold(1)
 imu.setMaxBatchReports(10)
 imu.out.link(xlinkOut.input)
 
-imu.enableFirmwareUpdate(True)
+# imu.enableFirmwareUpdate(True)
 
 with dai.Device(pipeline) as device:
 
