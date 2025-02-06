@@ -21,7 +21,7 @@ labelMap = ["person", ""]
 
 # 设置默认的神经网络模型路径和视频路径
 nnPathDefault = str((Path(__file__).parent / Path(blobconverter.from_zoo(name='person-detection-retail-0013', shaves=7))).resolve().absolute())
-videoPathDefault = str((Path(__file__).parent / Path('../video/football.mp4')).resolve().absolute())
+videoPathDefault = str((Path(__file__).parent / Path('../test/video/football.mp4')).resolve().absolute())
 
 # 解析命令行参数
 parser = argparse.ArgumentParser()

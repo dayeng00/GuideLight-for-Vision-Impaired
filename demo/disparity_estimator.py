@@ -1,7 +1,7 @@
 """
 此代码演示了双目视差和深度估计
 """
-#!/usr/bin/env python3
+# !/usr/bin/env python3
 
 import cv2  # 导入OpenCV库，用于图像处理和显示
 import depthai as dai  # 导入DepthAI库，用于与OAK设备的通信和控制
@@ -24,13 +24,13 @@ xout = pipeline.create(dai.node.XLinkOut)  # 创建输出节点，用于将数�
 xout.setStreamName("disparity")  # 设置输出流的名称
 
 # 配置左、右单目摄像头的属性
-monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)  # 设置左摄像头分辨率为400P
-monoLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)  # 设置左摄像头的标识
-monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)  # 设置右摄像头分辨率为400P
-monoRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)  # 设置右摄像头的标识
+monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)  # 设置左摄像头分辨率为400P
+monoLeft.setBoardSocket(dai.CameraBoardSocket.CAM_B)  # 设置左摄像头的标识
+monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)  # 设置右摄像头分辨率为400P
+monoRight.setBoardSocket(dai.CameraBoardSocket.CAM_C)  # 设置右摄像头的标识
 
 # 配置深度图节点的属性
-depth.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)  # 设置深度图生成模式为高密度
+depth.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.DEFAULT)  # 设置深度图生成模式为高密度
 # 设置中值滤波器，选项包括：MEDIAN_OFF, KERNEL_3x3, KERNEL_5x5, KERNEL_7x7（默认）
 depth.initialConfig.setMedianFilter(dai.MedianFilter.KERNEL_7x7)
 depth.setLeftRightCheck(lr_check)  # 设置是否启用左右视差检查
@@ -44,7 +44,6 @@ depth.disparity.link(xout.input)  # 深度图节点的视差输出连接到输�
 
 # 连接到设备并启动管道
 with dai.Device(pipeline) as device:
-
     # 获取输出队列，用于从设备获取视差图数据
     q = device.getOutputQueue(name="disparity", maxSize=4, blocking=False)
 

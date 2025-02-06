@@ -101,9 +101,9 @@ xinTrackedFeaturesConfig.setStreamName("trackedFeaturesConfig")
 
 # 配置相机属性
 monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)  # 设置左侧单目相机分辨率为400P
-monoLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)  # 设置相机为左侧相机
+monoLeft.setBoardSocket(dai.CameraBoardSocket.CAM_B)  # 设置相机为左侧相机
 monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)  # 设置右侧单目相机分辨率为400P
-monoRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)  # 设置相机为右侧相机
+monoRight.setBoardSocket(dai.CameraBoardSocket.CAM_C)  # 设置相机为右侧相机
 
 # 禁用光流估算（默认为禁用，防止光流干扰）
 featureTrackerLeft.initialConfig.setMotionEstimator(False)
@@ -138,7 +138,6 @@ with dai.Device(pipeline) as device:
     # 设置显示窗口的名称
     leftWindowName = "left"
     rightWindowName = "right"
-
 
     # 用于绘制跟踪特征的函数
     def drawFeatures(frame, features):

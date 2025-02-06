@@ -115,9 +115,9 @@ xinTrackedFeaturesConfig.setStreamName("trackedFeaturesConfig")
 
 # 设置相机分辨率
 monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
-monoLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)
+monoLeft.setBoardSocket(dai.CameraBoardSocket.CAM_B)
 monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
-monoRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
+monoRight.setBoardSocket(dai.CameraBoardSocket.CAM_C)
 
 # 连接各个节点
 monoLeft.out.link(featureTrackerLeft.inputImage)
