@@ -1,3 +1,6 @@
+"""
+特征点追踪
+"""
 import cv2
 import time
 import depthai as dai
@@ -63,7 +66,14 @@ class FeaturePointTrackerDrawer:
 
 
 class FeaturePointTracker(VideoShowOAK):
-    def __init__(self, camera_size=720, is_show_fps=True):
+    def __init__(self, camera_size=720, is_show_fps=True, motion_estimation="hardware_accelerated"):
+        """
+
+        :param camera_size:
+        :param is_show_fps:
+        :param motion_estimation: 运动估算方法：  "hardware_accelerated" 硬件加速法
+                                               "lucas_kanade_optical_flow" 光流法 默认硬件加速法
+        """
         super().__init__(camera_size=camera_size, is_show_fps=is_show_fps)
 
         self.featureTrackerLeft = self.pipeline.create(dai.node.FeatureTracker)
@@ -97,7 +107,8 @@ class FeaturePointTracker(VideoShowOAK):
         self.featureTrackerRight.setHardwareResources(numShaves, numMemorySlices)
 
         self.featureTrackerConfig = self.featureTrackerRight.initialConfig.get()
-        print("Press 's' to switch between Lucas-Kanade optical flow and hardware accelerated motion estimation!")
+
+        self.motion_estimation = motion_estimation
 
     def run(self):
         with dai.Device(self.pipeline) as device:
@@ -112,6 +123,21 @@ class FeaturePointTracker(VideoShowOAK):
 
             rightWindowName = "right"
             rightFeatureDrawer = FeaturePointTrackerDrawer("Feature tracking duration (frames)", rightWindowName)
+
+            # 设置运动估算方法
+            if self.motion_estimation == "hardware_accelerated":
+                self.featureTrackerConfig.motionEstimator.type = dai.FeatureTrackerConfig.MotionEstimator.Type.HW_MOTION_ESTIMATION
+                print("Using hardware accelerated motion estimation")
+            elif self.motion_estimation == "lucas_kanade_optical_flow":
+                self.featureTrackerConfig.motionEstimator.type = dai.FeatureTrackerConfig.MotionEstimator.Type.LUCAS_KANADE_OPTICAL_FLOW
+                print("Switching to Lucas-Kanade optical flow")
+            else:
+                raise ValueError("Unknown motion estimation!")
+                return
+
+            cfg = dai.FeatureTrackerConfig()
+            cfg.set(self.featureTrackerConfig)
+            inputFeatureTrackerConfigQueue.send(cfg)
 
             while True:
                 inPassthroughFrameLeft = passthroughImageLeftQueue.get()
@@ -141,25 +167,13 @@ class FeaturePointTracker(VideoShowOAK):
 
                 key = cv2.waitKey(1)
 
-                if key == ord('s'):
-                    if self.featureTrackerConfig.motionEstimator.type == dai.FeatureTrackerConfig.MotionEstimator.Type.LUCAS_KANADE_OPTICAL_FLOW:
-                        self.featureTrackerConfig.motionEstimator.type = dai.FeatureTrackerConfig.MotionEstimator.Type.HW_MOTION_ESTIMATION
-                        print("Switching to hardware accelerated motion estimation")
-                    else:
-                        self.featureTrackerConfig.motionEstimator.type = dai.FeatureTrackerConfig.MotionEstimator.Type.LUCAS_KANADE_OPTICAL_FLOW
-                        print("Switching to Lucas-Kanade optical flow")
-
-                    cfg = dai.FeatureTrackerConfig()
-                    cfg.set(self.featureTrackerConfig)
-                    inputFeatureTrackerConfigQueue.send(cfg)
-
                 if not self.continue_running:
                     break
 
 
 if __name__ == "__main__":
     if __name__ == "__main__":
-        feature_point_tracker = FeaturePointTracker(camera_size=720)
+        feature_point_tracker = FeaturePointTracker(camera_size=720, motion_estimation="hardware_accelerated")
         feature_point_tracker.start()  # 创建了一个新线程
         time.sleep(20)
         feature_point_tracker.close()

@@ -65,15 +65,15 @@ camRgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)  # 设置颜色�
 
 # 设置左单目摄像头属性
 monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)  # 分辨率设置为400P
-monoLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)
+monoLeft.setBoardSocket(dai.CameraBoardSocket.CAM_B)
 
 # 设置右单目摄像头属性
 monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)  # 分辨率设置为400P
-monoRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
+monoRight.setBoardSocket(dai.CameraBoardSocket.CAM_C)
 
 # 设置立体深度计算节点属性
-stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)  # 设置为高密度深度图模式
-stereo.setDepthAlign(dai.CameraBoardSocket.RGB)  # 将深度图对齐到RGB摄像头的视角
+stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.DEFAULT)  # 设置为高密度深度图模式
+stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)  # 将深度图对齐到RGB摄像头的视角
 stereo.setOutputSize(monoLeft.getResolutionWidth(), monoLeft.getResolutionHeight())  # 设置输出大小与单目摄像头一致
 
 # 设置空间检测网络属性

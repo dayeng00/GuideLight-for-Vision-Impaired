@@ -1,3 +1,6 @@
+"""
+视差估计
+"""
 #!/usr/bin/env python3
 
 import cv2

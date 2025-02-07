@@ -6,6 +6,22 @@
 然后下载一个现成的模型。该模型可以识别 7 种手势：👍, 👎, ✌️, ☝️, ✊, 👋, 🤟
 有关模型的更多详细信息，请查看 [MediaPipe 文档](https://developers.google.com/mediapipe/solutions/vision/gesture_recognizer#models)。
 """
+
+"""
+0 - Unrecognized gesture, label: Unknown
+1 - Closed fist, label: Closed_Fist
+2 - Open palm, label: Open_Palm
+3 - Pointing up, label: Pointing_Up
+4 - Thumbs down, label: Thumb_Down
+5 - Thumbs up, label: Thumb_Up
+6 - Victory, label: Victory
+7 - Love, label: ILoveYou
+"""
+
+# 如果模型检测到手部但未识别出手势，手势识别器会返回“None”结果。如果模型未检测到手，手势识别器会返回空值。
+# 手势识别模型详解网址:
+# https://ai.google.dev/edge/mediapipe/solutions/vision/gesture_recognizer?hl=zh-cn
+
 import math
 
 # @markdown 我们实现了一些函数来可视化手势识别结果。运行以下单元格以激活这些函数。
@@ -90,10 +106,10 @@ def display_batch_of_images_with_gestures_and_hand_landmarks(images, results):
     plt.show()
 
 
-IMAGE_FILENAMES = ['./resources/gesture_recognizer/thumbs_down.jpg',
-                   './resources/gesture_recognizer/victory.jpg',
-                   './resources/gesture_recognizer/thumbs_up.jpg',
-                   './resources/gesture_recognizer/pointing_up.jpg']
+IMAGE_FILENAMES = ['./utils/gesture_recognizer/pointing_up.jpg',
+                   './utils/gesture_recognizer/victory.jpg',
+                   './utils/gesture_recognizer/thumbs_up.jpg',
+                   './utils/gesture_recognizer/pointing_up.jpg']
 
 
 """
@@ -109,7 +125,7 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
 # 第二步：创建 GestureRecognizer 对象。
-base_options = python.BaseOptions(model_asset_path='resources/gesture_recognizer/gesture_recognizer.task')
+base_options = python.BaseOptions(model_asset_path='./utils/gesture_recognizer/gesture_recognizer.task')
 options = vision.GestureRecognizerOptions(base_options=base_options)
 recognizer = vision.GestureRecognizer.create_from_options(options)
 
