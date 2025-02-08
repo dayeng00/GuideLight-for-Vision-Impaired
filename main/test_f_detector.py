@@ -4,7 +4,7 @@
 import eventlet
 
 eventlet.monkey_patch()
-from feature_point_detector import FeaturePointDetector # 引入封装类
+from utils.feature_point_detector import FeaturePointDetector # 引入封装类
 from flask import Flask
 from flask_socketio import SocketIO
 import cv2

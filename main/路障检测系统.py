@@ -11,12 +11,12 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 # 引入各类视频流
-from disparity_estimator import DisparityEstimator
-from gesture_point_recognition import GesturePointRecognition
-from gesture_recognizer import GestureRecognizer
-from moblie_net_SSD_detector import OakDMobileNetSSD
-from person_detection_tracker_on_video import PersonDetectionTrackerOnVideo
-from spatial_object_tracker_on_RGB import SpatialObjectTracker
+from utils.disparity_estimator import DisparityEstimator
+from utils.gesture_point_recognition import GesturePointRecognition
+from utils.gesture_recognizer import GestureRecognizer
+from utils.moblie_net_SSD_detector import OakDMobileNetSSD
+from utils.person_detection_tracker_on_video import PersonDetectionTrackerOnVideo
+from utils.spatial_object_tracker_on_RGB import SpatialObjectTracker
 
 d_estimator = None
 f_detector = None
