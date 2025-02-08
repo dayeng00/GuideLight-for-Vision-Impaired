@@ -1,3 +1,6 @@
+"""
+此模块是一个子模块 不需要调用
+"""
 import numpy as np
 
 
@@ -20,7 +23,7 @@ class PalmDetection:
         # 定义最小置信度阈值
         min_score_thresh = 0.7
         # 加载手掌检测的锚框
-        anchors = np.load("anchors_palm.npy")
+        anchors = np.load("../resources/human_machine_safety/anchors_palm.npy")
 
         # 运行神经网络，将数据转换为张量结果
         results = self.to_tensor_result(nn_data)
