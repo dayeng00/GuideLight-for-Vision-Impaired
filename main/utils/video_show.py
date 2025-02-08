@@ -53,7 +53,14 @@ class VideoShow(Thread):
         return img
 
     def close(self):
+        """
+        关闭视频流和窗口，释放资源。
+        """
         self.continue_running = False
+        # 等待一段时间，确保线程有足够的时间退出循环
+        time.sleep(0.5)
+        # 销毁所有OpenCV窗口
+        cv2.destroyAllWindows()
 
 
 class VideoShowOAK(VideoShow):
