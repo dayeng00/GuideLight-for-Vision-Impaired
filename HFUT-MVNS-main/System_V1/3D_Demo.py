@@ -245,6 +245,7 @@ def A():
         buf_height, buf_width, _ = buf.shape
         BEV[BEV_height - buf_height:, :buf_width] = buf
 
+        cv2.resizeWindow(BEV, (640, 640))
         cv2.imshow("BEV", BEV)
 
     cv2.destroyAllWindows()

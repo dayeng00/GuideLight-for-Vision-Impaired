@@ -44,11 +44,11 @@ class VideoShow(Thread):
 
             if self.current_time - self.old_time >= 0.3:
                 # 在图像上绘制 FPS 信息
-                cv2.putText(img, f'FPS: {int(fps)}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), thickness)
+                cv2.putText(img, f'FPS: {int(fps)}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (235, 206, 135), thickness)
                 self.old_time = self.current_time
                 self.fps = fps
             else:
-                cv2.putText(img, f'FPS: {int(self.fps)}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), thickness)
+                cv2.putText(img, f'FPS: {int(self.fps)}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (235, 206, 135), thickness)
 
         return img
 
