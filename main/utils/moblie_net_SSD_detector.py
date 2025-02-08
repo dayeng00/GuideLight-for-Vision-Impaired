@@ -31,7 +31,7 @@ class OakDMobileNetSSD(VideoShowOAK):
         self.detections = []
 
         self._setup_pipeline()
-
+        self.device = None
     def _setup_pipeline(self):
         # 设置彩色相机
         cam_rgb = self.pipeline.createColorCamera()
@@ -59,9 +59,9 @@ class OakDMobileNetSSD(VideoShowOAK):
         return (np.clip(np.array(bbox), 0, 1) * normVals).astype(int)
 
     def run(self):
-        with depthai.Device(self.pipeline) as device:
-            q_rgb = device.getOutputQueue("rgb")
-            q_nn = device.getOutputQueue("nn")
+        with depthai.Device(self.pipeline) as self.device:
+            q_rgb = self.device.getOutputQueue("rgb")
+            q_nn = self.device.getOutputQueue("nn")
 
             while True:
                 in_rgb = q_rgb.tryGet()
@@ -81,13 +81,20 @@ class OakDMobileNetSSD(VideoShowOAK):
 
                     self.frame = cv2.resize(self.frame, self.output_size)
                     self.frame = self.show_fps(self.frame)
-                    cv2.imshow("preview", self.frame)
+                    _, buffer = cv2.imencode('.jpg', self.frame)
+                    frame_bytes = buffer.tobytes()
 
-                cv2.waitKey(1)
+                    # 以 MJPEG 格式返回
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+                # cv2.waitKey(1)
                 if not self.continue_running:
                     break
+    def shutdown(self):
+        self.device.close()
 
-
+# 一个视频流
 if __name__ == "__main__":
     oakd_mobilenet_SSD = OakDMobileNetSSD(camera_size=720, preview_size=(300, 300))
     oakd_mobilenet_SSD.start()  # 创建了一个新线程

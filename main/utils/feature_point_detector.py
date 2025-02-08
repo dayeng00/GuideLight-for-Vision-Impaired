@@ -5,7 +5,14 @@ import cv2
 import time
 from video_show import VideoShowOAK
 import depthai as dai
+from flask_socketio import SocketIO
+import base64
+import eventlet
+from flask import Flask, Response
+eventlet.monkey_patch()
 
+app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 class FeaturePointDetector(VideoShowOAK):
     def __init__(self, camera_size=720, is_show_fps=True, corner_detector="harris"):
@@ -55,7 +62,7 @@ class FeaturePointDetector(VideoShowOAK):
 
         # 获取当前特征跟踪配置（可以用来修改配置）
         self.featureTrackerConfig = self.featureTrackerRight.initialConfig.get()
-
+        self.device = None
         # 选择角点检测方法
         if corner_detector == "harris":
             self.featureTrackerConfig.cornerDetector.type = dai.FeatureTrackerConfig.CornerDetector.Type.HARRIS  # 切换到HARRIS角点检测
@@ -76,15 +83,15 @@ class FeaturePointDetector(VideoShowOAK):
 
     def run(self):
         # 连接设备并启动数据流管道
-        with dai.Device(self.pipeline) as device:
+        with dai.Device(self.pipeline) as self.device:
 
             # 获取输出队列，用于接收处理后的结果
-            passthroughImageLeftQueue = device.getOutputQueue("passthroughFrameLeft", 8, False)  # 获取左侧相机的传递图像队列
-            outputFeaturesLeftQueue = device.getOutputQueue("trackedFeaturesLeft", 8, False)  # 获取左侧特征跟踪的输出队列
-            passthroughImageRightQueue = device.getOutputQueue("passthroughFrameRight", 8, False)  # 获取右侧相机的传递图像队列
-            outputFeaturesRightQueue = device.getOutputQueue("trackedFeaturesRight", 8, False)  # 获取右侧特征跟踪的输出队列
+            passthroughImageLeftQueue = self.device.getOutputQueue("passthroughFrameLeft", 8, False)  # 获取左侧相机的传递图像队列
+            outputFeaturesLeftQueue = self.device.getOutputQueue("trackedFeaturesLeft", 8, False)  # 获取左侧特征跟踪的输出队列
+            passthroughImageRightQueue = self.device.getOutputQueue("passthroughFrameRight", 8, False)  # 获取右侧相机的传递图像队列
+            outputFeaturesRightQueue = self.device.getOutputQueue("trackedFeaturesRight", 8, False)  # 获取右侧特征跟踪的输出队列
 
-            self.inputFeatureTrackerConfigQueue = device.getInputQueue("trackedFeaturesConfig")  # 获取特征跟踪配置输入队列
+            self.inputFeatureTrackerConfigQueue = self.device.getInputQueue("trackedFeaturesConfig")  # 获取特征跟踪配置输入队列
 
             # 发送更新后的特征跟踪配置
             cfg = dai.FeatureTrackerConfig()
@@ -122,16 +129,26 @@ class FeaturePointDetector(VideoShowOAK):
                 left_frame = cv2.resize(leftFrame, (int(self.camera_size * 1280 / 720), int(self.camera_size)))
                 right_frame = cv2.resize(rightFrame, (int(self.camera_size * 1280 / 720), int(self.camera_size)))
 
-                # 显示左右图像
-                cv2.imshow(leftWindowName, left_frame)
-                cv2.imshow(rightWindowName, right_frame)
+                # **新增：转换为 Base64 并通过 WebSocket 发送**
+                _, buffer_left = cv2.imencode('.jpg', leftFrame)
+                _, buffer_right = cv2.imencode('.jpg', rightFrame)
 
-                cv2.waitKey(1)  # 获取按键
+                left_base64 = base64.b64encode(buffer_left).decode('utf-8')
+                right_base64 = base64.b64encode(buffer_right).decode('utf-8')
+
+                socketio.emit('video_stream', {'id': 1, 'frame': left_base64})
+                socketio.emit('video_stream', {'id': 2, 'frame': right_base64})
+
+                # cv2.waitKey(1)  # 获取按键
 
                 if not self.continue_running:
                     break
 
+    def shutdown(self):
+        self.device.close()
 
+
+# 两个视频流
 # 创建FeatureTracker实例并运行
 if __name__ == "__main__":
     feature_point_detector = FeaturePointDetector(camera_size=720)

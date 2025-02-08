@@ -43,14 +43,15 @@ class DisparityEstimator(VideoShowOAK):
         self.monoLeft.out.link(self.depth.left)
         self.monoRight.out.link(self.depth.right)
         self.depth.disparity.link(self.xout.input)
+        self.device = None
 
     def run(self):
         """
         启动深度估计并显示视差图。
         """
-        with dai.Device(self.pipeline) as device:
+        with dai.Device(self.pipeline) as self.device:
             # 获取输出队列
-            q = device.getOutputQueue(name="disparity", maxSize=4, blocking=False)
+            q = self.device.getOutputQueue(name="disparity", maxSize=4, blocking=False)
 
             while True:
                 inDisparity = q.get()  # 从队列中获取视差图数据
@@ -68,14 +69,21 @@ class DisparityEstimator(VideoShowOAK):
                 # 调整图像大小
                 frame = cv2.resize(frame, (int(self.camera_size * 1280 / 720), int(self.camera_size)))
 
-                cv2.imshow("disparity_color", frame)  # 显示带有颜色映射的视差图
+                _, buffer = cv2.imencode('.jpg', frame)
+                frame_bytes = buffer.tobytes()
 
-                cv2.waitKey(1)
+                # 以 MJPEG 格式返回
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')  # 显示带有颜色映射的视差图
 
                 if not self.continue_running:
                     break
 
+    def shutdown(self):
+        self.device.close()
 
+
+# 一个视频流
 if __name__ == "__main__":
     # 创建StereoDepthEstimator实例并运行
     disparity_estimator = DisparityEstimator(camera_size=720)

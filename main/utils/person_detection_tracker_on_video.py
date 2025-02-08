@@ -24,6 +24,7 @@ class PersonDetectionTrackerOnVideo(VideoShow):
         self.labelMap = ["person", ""]
         self.pipeline = dai.Pipeline()
         self.setup_pipeline()
+        self.device = None
 
     def setup_pipeline(self):
         """
@@ -123,13 +124,13 @@ class PersonDetectionTrackerOnVideo(VideoShow):
         """
         运行视频处理主循环。
         """
-        with dai.Device(self.pipeline) as device:
+        with dai.Device(self.pipeline) as self.device:
             # 获取输入和输出队列
-            qIn = device.getInputQueue(name="inFrame")
-            trackerFrameQ = device.getOutputQueue(name="trackerFrame", maxSize=4)
-            tracklets = device.getOutputQueue(name="tracklets", maxSize=4)
-            qManip = device.getOutputQueue(name="manip", maxSize=4)
-            qDet = device.getOutputQueue(name="nn", maxSize=4)
+            qIn = self.device.getInputQueue(name="inFrame")
+            trackerFrameQ = self.device.getOutputQueue(name="trackerFrame", maxSize=4)
+            tracklets = self.device.getOutputQueue(name="tracklets", maxSize=4)
+            qManip = self.device.getOutputQueue(name="manip", maxSize=4)
+            qDet = self.device.getOutputQueue(name="nn", maxSize=4)
 
             # 初始化变量
             startTime = time.monotonic()
@@ -211,15 +212,24 @@ class PersonDetectionTrackerOnVideo(VideoShow):
                 trackerFrame = self.show_fps(trackerFrame)
 
                 # 显示跟踪帧
-                cv2.imshow("tracker", trackerFrame)
-                cv2.waitKey(1)
+                _, buffer = cv2.imencode('.jpg', trackerFrame)
+                frame_bytes = buffer.tobytes()
+
+                # 以 MJPEG 格式返回
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                # cv2.waitKey(1)
                 if not self.continue_running:
                     break
 
             cap.release()
             cv2.destroyAllWindows()
 
+    def shutdown(self):
+        self.device.close()
 
+
+# 一个视频流
 if __name__ == "__main__":
     person_tracker = PersonDetectionTrackerOnVideo(nnPath=blobconverter.from_zoo(name='person-detection-retail-0013',
                                                                                  shaves=7),

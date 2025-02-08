@@ -69,7 +69,6 @@ class VideoShowOAK(VideoShow):
 
         # 创建DepthAI的管道（Pipeline）
         self.pipeline = dai.Pipeline()
-
         # 定义单目摄像头节点
         self.monoLeft = self.pipeline.create(dai.node.MonoCamera)
         self.monoRight = self.pipeline.create(dai.node.MonoCamera)

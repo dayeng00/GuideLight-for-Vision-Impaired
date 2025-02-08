@@ -43,6 +43,7 @@ class SpatialObjectTracker(VideoShow):
         self.pipeline = dai.Pipeline()
         self.setup_pipeline()
         self.output_size = output_size
+        self.device = None
 
     def setup_pipeline(self):
         # 定义节点和输出
@@ -109,9 +110,9 @@ class SpatialObjectTracker(VideoShow):
         stereo.depth.link(spatialDetectionNetwork.inputDepth)
 
     def run(self):
-        with dai.Device(self.pipeline) as device:
-            preview = device.getOutputQueue("preview", 4, False)
-            tracklets = device.getOutputQueue("tracklets", 4, False)
+        with dai.Device(self.pipeline) as self.device:
+            preview = self.device.getOutputQueue("preview", 4, False)
+            tracklets = self.device.getOutputQueue("tracklets", 4, False)
 
             startTime = time.monotonic()
             counter = 0
@@ -159,14 +160,23 @@ class SpatialObjectTracker(VideoShow):
                 cv2.putText(frame, "NN fps: {:.2f}".format(fps), (2, frame.shape[0] - 4), cv2.FONT_HERSHEY_TRIPLEX, 0.4,
                             color)
                 frame = cv2.resize(frame, self.output_size)
-                cv2.imshow("tracker", frame)
+                _, buffer = cv2.imencode('.jpg', frame)
+                frame_bytes = buffer.tobytes()
 
-                cv2.waitKey(1)
+                # 以 MJPEG 格式返回
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+                # cv2.waitKey(1)
 
                 if not self.continue_running:
                     break
 
+    def shutdown(self):
+        self.device.close()
 
+
+# 一个视频流
 if __name__ == "__main__":
     spatial_object_tracker = SpatialObjectTracker()
     spatial_object_tracker.start()  # 创建了一个新线程

@@ -31,6 +31,7 @@ class GesturePointRecognition(VideoShow):
         self.output_size = output_size
         self.previousTime = 0
         self.currentTime = 0
+        self.device = None
 
     def run(self):
         # 创建管道
@@ -54,9 +55,9 @@ class GesturePointRecognition(VideoShow):
         cam_rgb.preview.link(xout_rgb.input)
 
         # 连接到设备并启动管道
-        with dai.Device(pipeline) as device:
+        with dai.Device(pipeline) as self.device:
             # 获取RGB流
-            q_rgb = device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
+            q_rgb = self.device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
 
             while True:
                 # 从队列中获取帧
@@ -86,15 +87,24 @@ class GesturePointRecognition(VideoShow):
                     self.previousTime = self.currentTime
                     cv2.putText(img, f'FPS: {int(fps)}', (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 3)
                     img = cv2.resize(img, self.output_size)
-                    cv2.imshow('img', img)
+                    _, buffer = cv2.imencode('.jpg', img)
+                    frame_bytes = buffer.tobytes()
 
-                cv2.waitKey(1)
+                    # 以 MJPEG 格式返回
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+                # cv2.waitKey(1)
                 if not self.continue_running:
                     break
 
         cv2.destroyAllWindows()
 
+    def shutdown(self):
+        self.device.close()
 
+
+# 一个视频流
 if __name__ == "__main__":
     gesture_point_recognition = GesturePointRecognition(output_size=(720, 720))
     gesture_point_recognition.start()  # 创建了一个新线程

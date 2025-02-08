@@ -65,6 +65,7 @@ class GestureRecognizer(VideoShow):
         self.mp_hands = mp.solutions.hands
         self.mp_drawing = mp.solutions.drawing_utils
         self.mp_drawing_styles = mp.solutions.drawing_styles
+        self.device = None
 
     def display_one_image(self, image, title, subplot, titlesize=16):
         """显示一张图像以及预测的类别名称和分数。"""
@@ -97,8 +98,8 @@ class GestureRecognizer(VideoShow):
         cv2.imshow('Gesture Recognition', cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR))
 
     def run(self):
-        with dai.Device(self.pipeline) as device:
-            q_rgb = device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
+        with dai.Device(self.pipeline) as self.device:
+            q_rgb = self.device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
 
             while True:
                 in_rgb = q_rgb.tryGet()
@@ -117,15 +118,25 @@ class GestureRecognizer(VideoShow):
                         self.display_gesture_and_hand_landmarks(img_rgb, top_gesture, hand_landmarks)
                     else:
                         img_rgb = cv2.resize(img_rgb, self.output_size)
-                        cv2.imshow('Gesture Recognition', cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR))
+                        img = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+                        _, buffer = cv2.imencode('.jpg', img)
+                        frame_bytes = buffer.tobytes()
 
-                cv2.waitKey(1)
+                        # 以 MJPEG 格式返回
+                        yield (b'--frame\r\n'
+                               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+                # cv2.waitKey(1)
                 if not self.continue_running:
                     break
 
         cv2.destroyAllWindows()
 
+    def shutdown(self):
+        self.device.close()
 
+
+# 一个视频流
 if __name__ == "__main__":
     gesture_recognizer = GestureRecognizer(output_size=(640, 480))  # 视频帧一定是4:3 不然会拉伸
     gesture_recognizer.start()  # 创建了一个新线程
