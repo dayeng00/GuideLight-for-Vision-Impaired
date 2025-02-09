@@ -31,7 +31,10 @@ from mediapipe.framework.formats import landmark_pb2
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from matplotlib import pyplot as plt
-from utils.video_show import VideoShow
+if __name__ == "__main__":
+    from video_show import VideoShow
+else:
+    from utils.video_show import VideoShow
 
 
 class GestureRecognizer(VideoShow):

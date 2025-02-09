@@ -7,7 +7,10 @@ import cv2
 import depthai as dai
 import numpy as np
 
-from utils.video_show import VideoShow
+if __name__ == "__main__":
+    from video_show import VideoShow
+else:
+    from utils.video_show import VideoShow
 from palm_detection import PalmDetection
 
 # 深度阈值上限（单位：毫米）

@@ -5,7 +5,10 @@ import cv2
 import time
 import depthai as dai
 from collections import deque
-from utils.video_show import VideoShowOAK
+if __name__ == "__main__":
+    from video_show import VideoShowOAK
+else:
+    from utils.video_show import VideoShowOAK
 
 
 class FeaturePointTrackerDrawer:

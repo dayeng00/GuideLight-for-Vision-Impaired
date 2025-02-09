@@ -3,7 +3,10 @@
 """
 import cv2
 import time
-from utils.video_show import VideoShowOAK
+if __name__ == "__main__":
+    from video_show import VideoShowOAK
+else:
+    from utils.video_show import VideoShowOAK
 import depthai as dai
 from flask_socketio import SocketIO
 import base64

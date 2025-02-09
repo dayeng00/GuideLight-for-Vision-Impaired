@@ -5,7 +5,10 @@ import cv2
 import mediapipe as mp
 import time
 import depthai as dai
-from utils.video_show import VideoShow
+if __name__ == "__main__":
+    from video_show import VideoShow
+else:
+    from utils.video_show import VideoShow
 
 
 class GesturePointRecognition(VideoShow):
