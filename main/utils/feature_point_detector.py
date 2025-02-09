@@ -3,7 +3,7 @@
 """
 import cv2
 import time
-from video_show import VideoShowOAK
+from utils.video_show import VideoShowOAK
 import depthai as dai
 from flask_socketio import SocketIO
 import base64

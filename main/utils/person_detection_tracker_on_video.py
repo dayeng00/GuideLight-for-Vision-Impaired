@@ -5,7 +5,7 @@ import cv2
 import depthai as dai
 import numpy as np
 import time
-from video_show import VideoShow
+from utils.video_show import VideoShow
 
 
 class PersonDetectionTrackerOnVideo(VideoShow):

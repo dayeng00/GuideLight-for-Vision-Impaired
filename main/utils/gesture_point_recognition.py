@@ -5,7 +5,7 @@ import cv2
 import mediapipe as mp
 import time
 import depthai as dai
-from video_show import VideoShow
+from utils.video_show import VideoShow
 
 
 class GesturePointRecognition(VideoShow):

@@ -7,7 +7,7 @@ import cv2
 import time
 import depthai
 import numpy as np
-from video_show import VideoShowOAK
+from utils.video_show import VideoShowOAK
 
 
 class OakDMobileNetSSD(VideoShowOAK):
