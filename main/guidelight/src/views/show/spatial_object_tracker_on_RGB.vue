@@ -28,7 +28,7 @@ const serverUrl = "http://127.0.0.1:5000";
 
 
 // 摄像头流地址
-const camera1Url = ref(`${serverUrl}/s_RGB/video_feed1`);
+const camera1Url = ref(`${serverUrl}/s_RGB/video_feed`);
 
 
 
@@ -36,7 +36,7 @@ const camera1Url = ref(`${serverUrl}/s_RGB/video_feed1`);
 const startStreaming = () => {
   // TODO: 实现开启摄像头的逻辑
   // console.log("开启摄像头");
-  camera1Url.value = `${serverUrl}/s_RGB/video_feed1`;
+  camera1Url.value = `${serverUrl}/s_RGB/video_feed`;
   axios.post(`${serverUrl}/s_RGB/start_cameras`).then((response) => {
     console.log(response.data);
   })

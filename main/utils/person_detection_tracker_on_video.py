@@ -226,8 +226,6 @@ class PersonDetectionTrackerOnVideo(VideoShow):
                 if not self.continue_running:
                     break
 
-            cap.release()
-            cv2.destroyAllWindows()
 
     def shutdown(self):
         self.device.close()

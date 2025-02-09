@@ -38,7 +38,7 @@ else:
 
 
 class GestureRecognizer(VideoShow):
-    def __init__(self, model_path='../resources/gesture_recognizer/gesture_recognizer.task',
+    def __init__(self, model_path='./resources/gesture_recognizer/gesture_recognizer.task',
                  output_size=(640, 480)):
         """
 

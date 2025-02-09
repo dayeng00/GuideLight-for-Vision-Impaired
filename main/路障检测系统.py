@@ -17,6 +17,8 @@ from utils.gesture_recognizer import GestureRecognizer
 from utils.moblie_net_SSD_detector import OakDMobileNetSSD
 from utils.person_detection_tracker_on_video import PersonDetectionTrackerOnVideo
 from utils.spatial_object_tracker_on_RGB import SpatialObjectTracker
+# from test_f_detector import FeaturePointStreaming
+# from test_f_tracker import FeaturePointTrackerStreaming
 
 d_estimator = None
 f_detector = None
@@ -65,15 +67,19 @@ def exist(username):
         "category": "admin"
     }
 '''
+
+
 # 主页路由，返回 Vue 主页
 @app.route("/")
 def serve_index():
     return send_from_directory(app.template_folder, "index.html")
 
+
 # 处理 Vue 生成的静态资源
 @app.route("/<path:path>")
 def serve_static_files(path):
     return send_from_directory(app.static_folder, path)
+
 
 # 注册
 @app.route('/register', methods=['POST'])
@@ -174,26 +180,71 @@ def d_feed():
 
 # # 启动特征点识别摄像头占用
 # @app.route('/f_detector/start_cameras', methods=['POST'])
-# def d_start():
+# def f_d_start():
 #     global f_detector
 #     if f_detector is None:
-#         f_detector = DisparityEstimator()
+#         f_detector = FeaturePointStreaming()
 #     return jsonify({'message': 'Cameras started'}), 200
+#
 #
 # # 停止特征点识别摄像头占用
 # @app.route('/f_detector/stop_cameras', methods=['POST'])
-# def d_stop():
+# def f_d_stop():
 #     global f_detector
 #     if f_detector is not None:
 #         f_detector.shutdown()
 #         f_detector.close()
 #
-# # 接收get请求返回流式视频流
-# @app.route('/f_detector/video_feed')
-# def d_feed():
+#
+# # 接收get请求返回流式视频流1
+# @app.route('/f_detector/video_feed1')
+# def f_d_feed_1():
 #     global f_detector
 #     if f_detector is not None:
-#         return f_detector.run()
+#         return Response(f_detector.show_left(), mimetype='multipart/x-mixed-replace; boundary=frame')
+#
+#
+# # 接收get请求返回流式视频流2
+# @app.route('/f_detector/video_feed2')
+# def f_d_feed_2():
+#     global f_detector
+#     if f_detector is not None:
+#         return Response(f_detector.show_right(), mimetype='multipart/x-mixed-replace; boundary=frame')
+#
+#
+# # 启动特征点识别摄像头占用
+# @app.route('/f_tracker/start_cameras', methods=['POST'])
+# def f_t_start():
+#     global f_tracker
+#     if f_tracker is None:
+#         f_tracker = FeaturePointTrackerStreaming()
+#     return jsonify({'message': 'Cameras started'}), 200
+#
+#
+# # 停止特征点识别摄像头占用
+# @app.route('/f_tracker/stop_cameras', methods=['POST'])
+# def f_t_stop():
+#     global f_tracker
+#     if f_tracker is not None:
+#         f_tracker.shutdown()
+#         f_tracker.close()
+#
+#
+# # 接收get请求返回流式视频流1
+# @app.route('/f_tracker/video_feed1')
+# def f_t_feed_1():
+#     global f_tracker
+#     if f_tracker is not None:
+#         return Response(f_tracker.show_left(), mimetype='multipart/x-mixed-replace; boundary=frame')
+#
+#
+# # 接收get请求返回流式视频流2
+# @app.route('/f_tracker/video_feed2')
+# def f_t_feed_2():
+#     global f_tracker
+#     if f_tracker is not None:
+#         return Response(f_tracker.show_right(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 
 # 启动手势特征点识别摄像头占用
 @app.route('/g_recognition/start_cameras', methods=['POST'])
@@ -283,7 +334,7 @@ def p_start():
 
 
 # 停止人像追踪摄像头占用
-@app.route('/m_detector/stop_cameras', methods=['POST'])
+@app.route('/p_video/stop_cameras', methods=['POST'])
 def p_stop():
     global p_video
     if p_video is not None:
@@ -292,7 +343,7 @@ def p_stop():
 
 
 # 接收get请求返回流式视频流
-@app.route('/m_detector/video_feed')
+@app.route('/p_video/video_feed')
 def p_feed():
     global p_video
     if p_video is not None:

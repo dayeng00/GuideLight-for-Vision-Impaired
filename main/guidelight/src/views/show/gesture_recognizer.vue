@@ -28,17 +28,17 @@
   
   
   // 摄像头流地址
-  const camera1Url = ref(`${serverUrl}/g_recognizer/video_feed1`);
+  const camera1Url = ref(`${serverUrl}/g_recognizer/video_feed`);
 
   // 开启摄像头
   const startStreaming = () => {
     // TODO: 实现开启摄像头的逻辑
     // console.log("开启摄像头");
-    camera1Url.value = `${serverUrl}/g_recognizer/video_feed1`;
+    camera1Url.value = `${serverUrl}/g_recognizer/video_feed`;
     axios.post(`${serverUrl}/g_recognizer/start_cameras`).then((response) => {
       console.log(response.data);
     })
-    axios.post()
+
   };
 
   // 停止摄像头

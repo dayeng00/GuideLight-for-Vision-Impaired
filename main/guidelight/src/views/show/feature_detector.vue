@@ -1,74 +1,95 @@
 <template>
-    <div class="video-container">
-      
-      <div class="streams">
-        <div v-for="stream in videoStreams" :key="stream.id" class="video-box">
-          <h3>{{ stream.id === 1 ? '左摄像头' : '右摄像头' }}</h3>
-          <img :src="stream.frame" :alt="'Camera ' + stream.id">
-        </div>
-      </div>
-    </div>
-  </template>
-  
-  <script setup>
-  import { ref, onMounted } from 'vue';
-  
-  const videoStreams = ref([]);
-  
-  const socket = new WebSocket("ws://localhost:5173/socket.io/?EIO=4&transport=websocket");
-  
-  socket.onopen = () => {
-    console.log("WebSocket 已连接");
-  };
-  
-  socket.onmessage = (event) => {
-    const rawData = event.data;
-  
-    if (rawData.startsWith('42')) {  // Socket.IO 消息格式，42 开头是 "message" 事件
-      try {
-        const data = JSON.parse(rawData.slice(2));  // 解析 JSON
-        if (data[0] === "video_stream") {
-          const { id, frame } = data[1];
-  
-          // 查找已有流
-          const index = videoStreams.value.findIndex(v => v.id === id);
-          if (index !== -1) {
-            videoStreams.value[index].frame = `data:image/jpeg;base64,${frame}`;
-          } else {
-            videoStreams.value.push({ id, frame: `data:image/jpeg;base64,${frame}` });
-          }
-        }
-      } catch (error) {
-        console.error("WebSocket 数据解析失败", error);
-      }
-    }
-  };
-  
-  socket.onerror = (error) => {
-    console.error("WebSocket 连接错误:", error);
-  };
-  
-  onMounted(() => {
-    console.log("Vue 组件挂载，WebSocket 监听中...");
-  });
-  </script>
-  
-  <style scoped>
-  .video-container {
-    text-align: center;
-  }
-  .streams {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-  }
-  .video-box {
-    text-align: center;
-  }
-  img {
-    width: 400px;
-    height: auto;
-    border: 2px solid black;
-  }
-  </style>
+  <el-container class="container">
+
+
+    <el-main class="video-container">
+      <!-- 摄像头 1 -->
+      <el-card class="video-card">
+        <img :src="camera1Url" class="video-stream" />
+      </el-card>
+    </el-main>
+
+    <el-footer class="footer">
+      <el-button type="primary" @click="startStreaming">开启摄像头</el-button>
+      <el-button type="danger" @click="stopStreaming">停止摄像头</el-button>
+    </el-footer>
+  </el-container>
+</template>
+
+<script setup>
+import { ref } from "vue";
+import axios from "axios";
+//   import { useUserStore } from "../../store/userStore";
+// Flask 服务器地址（确保和 Flask 端口一致）
+const serverUrl = "http://127.0.0.1:5000";
+
+
+// 摄像头流地址
+const camera1Url = ref(`${serverUrl}/f_tracker/video_feed`);
+// 开启摄像头
+const startStreaming = () => {
+  // TODO: 实现开启摄像头的逻辑
+  // console.log("开启摄像头");
+  camera1Url.value = `${serverUrl}/f_tracker/video_feed`;
+  axios.post(`${serverUrl}/f_tracker/start_cameras`).then((response) => {
+    console.log(response.data);
+  })
+  axios.post()
+};
+
+// 停止摄像头
+const stopStreaming = () => {
+  // TODO: 实现停止摄像头的逻辑
+  // console.log("停止摄像头");
+  axios.post(`${serverUrl}/f_tracker/stop_cameras`).then((response) => {
+    console.log(response.data);
+  })
+};
+</script>
+
+<style scoped>
+/* 页面布局 */
+.container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 头部 */
+.header {
+  background-color: #409eff;
+  color: white;
+  text-align: center;
+  font-size: 20px;
+  padding: 10px;
+}
+
+/* 视频区域 */
+.video-container {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  padding: 20px;
+}
+
+/* 每个摄像头的卡片 */
+.video-card {
+  width: 45%;
+  text-align: center;
+}
+
+/* 视频流样式 */
+.video-stream {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+/* 底部 */
+.footer {
+  text-align: center;
+  padding: 10px;
+  background-color: #f5f5f5;
+}
+</style>
   

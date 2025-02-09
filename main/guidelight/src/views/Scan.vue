@@ -8,14 +8,14 @@
         </el-button>
         <template #dropdown style="">
           <el-dropdown-menu>
-            <el-dropdown-item command="base">基本影像</el-dropdown-item>
+<!--            <el-dropdown-item command="base">基本影像</el-dropdown-item>-->
             <el-dropdown-item command="disparity">视差估计</el-dropdown-item>
-            <el-dropdown-item command="detetor">特征检测</el-dropdown-item>
-            <el-dropdown-item command="tracker">特征点追踪</el-dropdown-item>
+<!--            <el-dropdown-item command="detetor">特征检测</el-dropdown-item>-->
+<!--            <el-dropdown-item command="tracker">特征点追踪</el-dropdown-item>-->
             <el-dropdown-item command="g_recognition">手势关键点检测</el-dropdown-item>
             <el-dropdown-item command="g_recognizer">手势识别</el-dropdown-item>
             <el-dropdown-item command="m_detector">目标检测</el-dropdown-item>
-            <el-dropdown-item command="p_tracker_V">人像追踪</el-dropdown-item>
+<!--            <el-dropdown-item command="p_tracker_V">人像追踪</el-dropdown-item>-->
             <el-dropdown-item command="tracker_RGB">RGB</el-dropdown-item>
           </el-dropdown-menu>
         </template>
