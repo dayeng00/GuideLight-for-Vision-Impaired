@@ -122,14 +122,17 @@ class GestureRecognizer(VideoShow):
                     else:
                         img_rgb = cv2.resize(img_rgb, self.output_size)
                         img = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
-                        _, buffer = cv2.imencode('.jpg', img)
-                        frame_bytes = buffer.tobytes()
 
-                        # 以 MJPEG 格式返回
-                        yield (b'--frame\r\n'
-                               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-
-                # cv2.waitKey(1)
+                        if __name__ == "__main__":
+                            cv2.imshow(img)
+                        else:
+                            # 以 MJPEG 格式返回
+                            _, buffer = cv2.imencode('.jpg', img)
+                            frame_bytes = buffer.tobytes()
+                            yield (b'--frame\r\n'
+                                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                if __name__ == "__main__":
+                    cv2.waitKey(1)
                 if not self.continue_running:
                     break
 
@@ -141,7 +144,8 @@ class GestureRecognizer(VideoShow):
 
 # 一个视频流
 if __name__ == "__main__":
-    gesture_recognizer = GestureRecognizer(output_size=(640, 480))  # 视频帧一定是4:3 不然会拉伸
+    gesture_recognizer = GestureRecognizer(output_size=(640, 480),
+                                           model_path='../resources/gesture_recognizer/gesture_recognizer.task')  # 视频帧一定是4:3 不然会拉伸
     gesture_recognizer.start()  # 创建了一个新线程
     time.sleep(20)
     gesture_recognizer.close()
