@@ -72,12 +72,16 @@ class DisparityEstimator(VideoShowOAK):
                 # 调整图像大小
                 frame = cv2.resize(frame, (int(self.camera_size * 1280 / 720), int(self.camera_size)))
 
-                _, buffer = cv2.imencode('.jpg', frame)
-                frame_bytes = buffer.tobytes()
+                if __name__ == "__main__":
+                    cv2.imshow("disparity", frame)
+                    cv2.waitKey(1)
+                else:
+                    _, buffer = cv2.imencode('.jpg', frame)
+                    frame_bytes = buffer.tobytes()
 
-                # 以 MJPEG 格式返回
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')  # 显示带有颜色映射的视差图
+                    # 以 MJPEG 格式返回
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')  # 显示带有颜色映射的视差图
 
                 if not self.continue_running:
                     break
@@ -91,7 +95,7 @@ if __name__ == "__main__":
     # 创建StereoDepthEstimator实例并运行
     disparity_estimator = DisparityEstimator(camera_size=720)
     disparity_estimator.start()  # 创建了一个新线程
-    time.sleep(8)
+    time.sleep(20)
     disparity_estimator.close()
     disparity_estimator.join()
     print("Done")

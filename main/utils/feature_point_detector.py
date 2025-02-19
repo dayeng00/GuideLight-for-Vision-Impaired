@@ -132,17 +132,20 @@ class FeaturePointDetector(VideoShowOAK):
                 left_frame = cv2.resize(leftFrame, (int(self.camera_size * 1280 / 720), int(self.camera_size)))
                 right_frame = cv2.resize(rightFrame, (int(self.camera_size * 1280 / 720), int(self.camera_size)))
 
-                # **新增：转换为 Base64 并通过 WebSocket 发送**
-                _, buffer_left = cv2.imencode('.jpg', leftFrame)
-                _, buffer_right = cv2.imencode('.jpg', rightFrame)
+                if __name__ == "__main__":
+                    cv2.imshow(leftWindowName, left_frame)
+                    cv2.imshow(rightWindowName, right_frame)
+                    cv2.waitKey(1)
+                else:
+                    # 新增：转换为 Base64 并通过 WebSocket 发送
+                    _, buffer_left = cv2.imencode('.jpg', leftFrame)
+                    _, buffer_right = cv2.imencode('.jpg', rightFrame)
 
-                left_base64 = base64.b64encode(buffer_left).decode('utf-8')
-                right_base64 = base64.b64encode(buffer_right).decode('utf-8')
+                    left_base64 = base64.b64encode(buffer_left).decode('utf-8')
+                    right_base64 = base64.b64encode(buffer_right).decode('utf-8')
 
-                socketio.emit('video_stream', {'id': 1, 'frame': left_base64})
-                socketio.emit('video_stream', {'id': 2, 'frame': right_base64})
-
-                # cv2.waitKey(1)  # 获取按键
+                    socketio.emit('video_stream', {'id': 1, 'frame': left_base64})
+                    socketio.emit('video_stream', {'id': 2, 'frame': right_base64})
 
                 if not self.continue_running:
                     break
