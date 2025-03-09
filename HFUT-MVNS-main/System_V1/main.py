@@ -1,26 +1,25 @@
-import sys
-import time
-
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
 from PyQt5.QtWebEngineWidgets import *
 from utils.OAK_Info import oak_device
-from utils.models import RoadBoundGetter
+
+# 提供了跨平台的音频输入输出功能，可用于录制和播放音频信号
 import sounddevice as sd
+
+# 导入 pyquaternion 库中的 Quaternion 类，用于处理四元数，四元数常用于三维空间中的旋转表示和计算
 from pyquaternion import Quaternion
+
+# 从 scipy 库的空间变换模块导入 Rotation 类并别名为 R，用于处理三维空间中的旋转，提供了多种旋转表示方式的转换功能
 from scipy.spatial.transform import Rotation as R
-import matplotlib.pyplot as plt
-from utils.tools import *
-import numpy as np
-from ultralytics import YOLO
+
+# 导入 speech_recognition 库，用于将语音音频转换为文本，实现语音识别功能
 import speech_recognition as sr
+
+# 导入 librosa 库，是一个强大的音频分析库，可用于音频特征提取、节拍检测、音高估计等音频处理任务
 import librosa
-import requests
-import threading
-import cv2
+
+# 导入 pyaudio 库，提供了跨平台的音频输入输出接口，可用于音频流的录制和播放操作
 import pyaudio
-import logging
 import random
 import sys
 import socket
@@ -28,18 +27,30 @@ import threading
 import pickle
 import time
 
-import numpy as np
+import requests
 from ultralytics import YOLO
 from utils.models import RoadBoundGetter
-import cv2
 import asyncio
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import pyqtSignal, QThread, Qt
 from PyQt5.QtGui import QPixmap, QImage
+import matplotlib.pyplot as plt
+from utils.tools import *
+
+# 导入 logging 库，用于记录程序运行过程中的信息、警告、错误等日志，方便调试和监控程序运行状态
 import logging
 
 # 设置日志的配置信息
 logging.basicConfig(level=logging.INFO)
+"""
+level=logging.INFO 参数：level 参数用于指定日志记录的级别。Python 的 logging 模块定义了多个日志级别，从低到高依次为：
+logging.DEBUG：最详细的日志级别，用于调试程序时记录详细的信息。
+logging.INFO：用于记录程序运行过程中的一般信息，比如程序的启动、某些操作的完成等。
+logging.WARNING：用于记录可能会导致问题的警告信息，例如资源即将耗尽、使用了不推荐的方法等。
+logging.ERROR：用于记录程序运行过程中发生的错误信息，但错误不一定会导致程序终止。
+logging.CRITICAL：最高级别的日志，用于记录非常严重的错误，通常会导致程序无法继续运行。
+当设置 level=logging.INFO 时，logging 模块将只记录级别为 INFO 及以上（即 INFO、WARNING、ERROR、CRITICAL）的日志信息，而 DEBUG 级别的日志信息将被忽略。
+"""
 
 objs = [labels_dict[i] for i in
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 56, 57, 58, 59, 60, 61, 62, 63, 67, 68, 72, 73]]

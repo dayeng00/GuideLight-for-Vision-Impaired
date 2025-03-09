@@ -560,7 +560,7 @@ class HumanMachineSafety(VideoShow):
 
 
 if __name__ == "__main__":
-    human_machine_safety = HumanMachineSafety(nnConfidence=0.5, model='mobilenet', nnPath=nnMobilenetPath)
+    human_machine_safety = HumanMachineSafety(nnConfidence=0.5, model='yolo', nnPath=nnYoloPath)
     human_machine_safety.start()  # 创建了一个新线程
     time.sleep(100)
     human_machine_safety.close()
