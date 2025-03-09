@@ -32,7 +32,17 @@ monoLeft = pipeline.create(dai.node.MonoCamera)
 monoRight = pipeline.create(dai.node.MonoCamera)
 stereo = pipeline.create(dai.node.StereoDepth)
 imu = pipeline.create(dai.node.IMU)
+"""
+Sync 节点主要用于同步多个输入消息流。
+在深度相机等设备的应用中，不同的传感器可能会以不同的速率产生数据，例如深度数据、彩色图像数据等。
+Sync 节点可以确保这些不同的数据流在时间上对齐，这样在后续处理中可以更准确地使用这些数据。
+"""
 sync = pipeline.create(dai.node.Sync)
+"""
+XLinkOut 节点用于将设备（如深度相机）内部的数据通过 XLink 接口输出到主机（通常是运行程序的计算机）。
+XLink 是 DepthAI 设备与主机之间的通信接口，XLinkOut 节点可以将各种类型的数据（如图像、深度信息等）
+从设备传输到主机上的应用程序，以便进行进一步的处理或显示。
+"""
 xoutGrp = pipeline.create(dai.node.XLinkOut)
 
 # Properties
@@ -44,6 +54,12 @@ monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
 monoRight.setCamera("right")
 xoutGrp.setStreamName("xoutGrp")
 # imu.enableIMUSensor([dai.IMUSensor.ACCELEROMETER_RAW, dai.IMUSensor.GYROSCOPE_RAW], 100)
+"""
+dai.IMUSensor.ROTATION_VECTOR：这是一个枚举值，表示要启用的 IMU 传感器的测量类型为旋转向量。
+    旋转向量可以用于描述物体在三维空间中的旋转状态，常用于姿态估计等应用。
+100：这个参数表示数据输出的频率，单位通常是赫兹（Hz）。
+    在这里，设置为 100Hz 意味着 IMU 传感器将以每秒 100 次的频率输出旋转向量数据。
+"""
 imu.enableIMUSensor(dai.IMUSensor.ROTATION_VECTOR, 100)
 imu.setBatchReportThreshold(1)  # 如果队列未被阻塞，则高于此数据包阈值的数据将被发送到主机
 imu.setMaxBatchReports(10)  # 批处理报告中的最大 IMU 数据包数
@@ -60,11 +76,13 @@ config.postProcessing.thresholdFilter.minRange = 500
 config.postProcessing.thresholdFilter.maxRange = 10000  # max 40000
 # config.postProcessing.decimationFilter.decimationFactor = 1
 stereo.initialConfig.set(config)
-stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_ACCURACY)
+stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_ACCURACY)  # 选择高精度模式
 # stereo.initialConfig.setMedianFilter(dai.MedianFilter.KERNEL_5x5)
+
 stereo.setLeftRightCheck(lr_check)
 stereo.setExtendedDisparity(extended_disparity)
 stereo.setSubpixel(subpixel)
+
 stereo.setSubpixelFractionalBits(5)
 color.setIspScale(1, 3)
 stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)  # 设置深度对齐color(360,640)
@@ -72,6 +90,11 @@ stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)  # 设置深度对齐color(360
 # Linking
 monoLeft.out.link(stereo.left)
 monoRight.out.link(stereo.right)
+"""
+isp 是 Image Signal Processor（图像信号处理器）的缩写。
+color.isp 表示颜色相机的图像信号处理器的输出。
+ISP 会对原始的图像数据进行一系列的处理，例如白平衡、色彩校正、降噪等，以提高图像的质量。
+"""
 color.isp.link(sync.inputs["color"])
 stereo.depth.link(sync.inputs["depth"])
 stereo.rectifiedRight.link(sync.inputs["rectifiedRight"])

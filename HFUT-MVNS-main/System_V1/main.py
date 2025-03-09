@@ -141,13 +141,16 @@ class ServerThread(QThread):
 
 
 class LogHandler(logging.Handler):
+    # 自定义日志处理器类，继承自 logging.Handler，用于将日志信息输出到指定的日志部件（如 QTextEdit 等）
     def __init__(self, log_widget):
-        super().__init__()
-        self.log_widget = log_widget
+        # 初始化方法，接收一个日志部件作为参数
+        super().__init__()  # 调用父类的初始化方法
+        self.log_widget = log_widget  # 将传入的日志部件保存为实例属性，方便后续使用
 
     def emit(self, record):
-        msg = self.format(record)
-        self.log_widget.append(msg)
+        # 重写父类的 emit 方法，该方法用于处理日志记录
+        msg = self.format(record)  # 调用父类的 format 方法将日志记录对象格式化为字符串
+        self.log_widget.append(msg)  # 将格式化后的日志信息添加到日志部件中
 
 
 class ServerApp(QMainWindow):
@@ -226,22 +229,23 @@ class ServerApp(QMainWindow):
 
 
 class SecondWindow(QWidget):
-    windowClosed = pyqtSignal()
-    signal_label_collision_probability = pyqtSignal(str)
-    signal_update_label_object_detection = pyqtSignal(QPixmap)
-    signal_update_label_semantic_segmentation = pyqtSignal(QPixmap)
-    signal_update_label_depth = pyqtSignal(QPixmap)
-    signal_update_label_BEV = pyqtSignal(QPixmap)
-    signal_update_label_collision_probability_data = pyqtSignal(QPixmap)
-    signal_update_textEdit_terminal = pyqtSignal(str)
+    windowClosed = pyqtSignal()  # 用于表示窗口关闭事件
+    signal_label_collision_probability = pyqtSignal(str)  # 用于传递碰撞概率相关的字符串信息
+    signal_update_label_object_detection = pyqtSignal(QPixmap)  # 用于更新目标检测标签的图像
+    signal_update_label_semantic_segmentation = pyqtSignal(QPixmap)  # 用于更新语义分割标签的图像
+    signal_update_label_depth = pyqtSignal(QPixmap)  # 用于更新深度标签的图像
+    signal_update_label_BEV = pyqtSignal(QPixmap)  # 用于更新鸟瞰图（BEV）标签的图像
+    signal_update_label_collision_probability_data = pyqtSignal(QPixmap)  # 用于更新碰撞概率数据标签的图像
+    signal_update_textEdit_terminal = pyqtSignal(str)  # 用于更新终端文本编辑框的文本内容（使用字符串类型）
 
-    signal_clean_label_collision_probability = pyqtSignal()
-    signal_clean_label_object_detection = pyqtSignal()
-    signal_clean_label_semantic_segmentation = pyqtSignal()
-    signal_clean_label_depth = pyqtSignal()
-    signal_clean_label_BEV = pyqtSignal()
-    signal_clean_label_collision_probability_data = pyqtSignal()
-    signal_clean_textEdit_terminal = pyqtSignal()
+    signal_clean_label_collision_probability = pyqtSignal()  # 用于清除碰撞概率标签的内容
+    signal_clean_label_object_detection = pyqtSignal()  # 用于清除目标检测标签的内容
+    signal_clean_label_semantic_segmentation = pyqtSignal()  # 用于清除语义分割标签的内容
+    signal_clean_label_depth = pyqtSignal()  # 用于清除深度标签的内容
+    signal_clean_label_BEV = pyqtSignal()  # 用于清除鸟瞰图（BEV）标签的内容
+    signal_clean_label_collision_probability_data = pyqtSignal()  # 用于清除碰撞概率数据标签的内容
+    signal_clean_textEdit_terminal = pyqtSignal()  # 用于清除终端文本编辑框的内容
+
 
     def __init__(self):
         super().__init__()
@@ -1337,31 +1341,32 @@ class cloud_service_window(QWidget):
 
 
 class Window(QMainWindow):
-    signal_update_label_L_MONO = pyqtSignal(QPixmap)
-    signal_clean_label_L_MONO = pyqtSignal()
-    signal_update_label_R_MONO = pyqtSignal(QPixmap)
-    signal_clean_label_R_MONO = pyqtSignal()
-    signal_update_label_RGB = pyqtSignal(QPixmap)
-    signal_clean_label_RGB = pyqtSignal()
-    signal_update_label_D = pyqtSignal(QPixmap)
-    signal_clean_label_D = pyqtSignal()
-    signal_update_label_pose = pyqtSignal(QPixmap)
-    signal_clean_label_pose = pyqtSignal()
-    signal_update_textEdit_pose = pyqtSignal(str)
-    signal_clean_textEdit_pose = pyqtSignal()
-    signal_update_label_Perception = pyqtSignal(QPixmap)
-    signal_update_label_BEV = pyqtSignal(QPixmap)
-    signal_clean_label_Perception_BEV = pyqtSignal()
-    signal_update_lineEdit_navigation_destination = pyqtSignal(str)
-    signal_back_lineEdit_navigation_destination = pyqtSignal()
-    signal_update_textEdit_terminal = pyqtSignal(str)
+    # Qpixmap 用于在屏幕上显示图象
+    signal_update_label_L_MONO = pyqtSignal(QPixmap)  # 用于更新左目相机图像标签的信号
+    signal_clean_label_L_MONO = pyqtSignal()  # 用于清除左目相机图像标签内容的信号
+    signal_update_label_R_MONO = pyqtSignal(QPixmap)  # 用于更新右目相机图像标签的信号
+    signal_clean_label_R_MONO = pyqtSignal()  # 用于清除右目相机图像标签内容的信号
+    signal_update_label_RGB = pyqtSignal(QPixmap)  # 用于更新RGB图像标签的信号
+    signal_clean_label_RGB = pyqtSignal()  # 用于清除RGB图像标签内容的信号
+    signal_update_label_D = pyqtSignal(QPixmap)  # 用于更新深度图像标签的信号
+    signal_clean_label_D = pyqtSignal()  # 用于清除深度图像标签内容的信号
+    signal_update_label_pose = pyqtSignal(QPixmap)  # 用于更新姿态图像标签的信号
+    signal_clean_label_pose = pyqtSignal()  # 用于清除姿态图像标签内容的信号
+    signal_update_textEdit_pose = pyqtSignal(str)  # 用于更新姿态相关文本编辑框内容的信号，携带字符串类型的数据
+    signal_clean_textEdit_pose = pyqtSignal()  # 用于清除姿态相关文本编辑框内容的信号
+    signal_update_label_Perception = pyqtSignal(QPixmap)  # 用于更新感知图像标签的信号
+    signal_update_label_BEV = pyqtSignal(QPixmap)  # 用于更新BEV图像标签的信号
+    signal_clean_label_Perception_BEV = pyqtSignal()  # 用于清除感知BEV图像标签内容的信号
+    signal_update_lineEdit_navigation_destination = pyqtSignal(str)  # 用于更新导航目的地行编辑框内容的信号，携带字符串类型的数据
+    signal_back_lineEdit_navigation_destination = pyqtSignal()  # 用于回退导航目的地行编辑框内容的信号
+    signal_update_textEdit_terminal = pyqtSignal(str)  # 用于更新终端文本编辑框内容的信号，携带字符串类型的数据
 
     def __init__(self):
         logging.info("Starting...")
         self.threads_running = True
-        self.system_pause = False
-        self.opened_other_widge = False
-        self.use_cloud_computing = False
+        self.system_pause = False  # 系统暂停
+        self.opened_other_widge = False  # 打开其他组件
+        self.use_cloud_computing = False  # 执行云计算
         super().__init__()
         self.initUI()
         self.initFunc()
@@ -1510,17 +1515,17 @@ class Window(QMainWindow):
         self.signal_back_lineEdit_navigation_destination.connect(
             lambda: self.lineEdit_navigation_destination.clear())
 
-        self.btn_speech_input.pressed.connect(self.pressed_btn_speech_input)
-        self.btn_speech_input.released.connect(self.released_btn_speech_input)
-        self.btn_start_navigation.clicked.connect(self.clicked_btn_start_navigation)
+        self.btn_speech_input.pressed.connect(self.pressed_btn_speech_input)  # 按住 语音输入 按钮 开始录音
+        self.btn_speech_input.released.connect(self.released_btn_speech_input)  # 松开 语音输入 按钮 开始语音转换
+        self.btn_start_navigation.clicked.connect(self.clicked_btn_start_navigation)  # 点击 导航 按钮
 
         self.signal_update_textEdit_terminal.connect(
             lambda text: self.textEdit_terminal.append(f"{text}"))
 
-        self.btn_switch_BEV.clicked.connect(self.clicked_btn_switch_BEV)
-        self.btn_open_cloud_computing.clicked.connect(self.clicked_btn_open_cloud_computing)
-        self.btn_system_run.clicked.connect(self.clicked_btn_system_run)
-        self.btn_system_stop.clicked.connect(self.clicked_btn_system_stop)
+        self.btn_switch_BEV.clicked.connect(self.clicked_btn_switch_BEV)  # 点击 显示轨迹 按钮
+        self.btn_open_cloud_computing.clicked.connect(self.clicked_btn_open_cloud_computing)  # 点击 云计算 按钮
+        self.btn_system_run.clicked.connect(self.clicked_btn_system_run)  # 点击 RUN 按钮
+        self.btn_system_stop.clicked.connect(self.clicked_btn_system_stop)  # 点击 STOP 按钮
 
     def initdata(self):
         self.btn_open_cam_is_clicked = False
@@ -1553,10 +1558,14 @@ class Window(QMainWindow):
             self.msgGrp = self.queue.get()
 
     def clicked_btn_open_cams(self):
+        """
+        Clicked 相机 按钮
+        :return:
+        """
         if not self.btn_system_run_is_clicked:
             if self.btn_open_cam_is_clicked:
                 self.btn_open_cam_is_clicked = False
-                self.btn_open_cam.setStyleSheet("QPushButton {}")
+                self.btn_open_cam.setStyleSheet("QPushButton {}")  # 将相机按钮的样式表设置为空，即恢复按钮的默认样式
             else:
                 self.btn_open_cam_is_clicked = True
                 self.btn_open_cam.setStyleSheet("QPushButton {background-color: #8DBF8B;}")
@@ -1651,7 +1660,18 @@ class Window(QMainWindow):
             pass
 
     def clicked_btn_start_navigation(self):
+        """
+        点击 导航 按钮
+        :return:
+        """
         def get_navigation_data(current_address, destination, key="ac5e6845a081b25303b11702c3196f50"):
+            """
+            获取导航信息
+            :param current_address:
+            :param destination:
+            :param key:
+            :return:
+            """
             # API URL
             url = f"https://restapi.amap.com/v5/direction/walking"
             # 请求参数
@@ -1671,6 +1691,12 @@ class Window(QMainWindow):
                 return f"Error: {response.status_code}"
 
         def get_geocode_data(address, key="ac5e6845a081b25303b11702c3196f50"):
+            """
+            获取地理编码数据
+            :param address:
+            :param key:
+            :return:
+            """
             # API URL
             url = f"https://restapi.amap.com/v3/geocode/geo"
             # 请求参数
@@ -1688,7 +1714,7 @@ class Window(QMainWindow):
             else:
                 return f"Error: {response.status_code}"
 
-        self.textEdit_navigation_route.clear()
+        self.textEdit_navigation_route.clear()  # 清除导航路线文本框内容
         current_address = str(self.current_address[0]) + ',' + str(self.current_address[1])
         # 将用户输入解析为起点和终点
         navigation_destination = self.lineEdit_navigation_destination.text()
@@ -1875,11 +1901,17 @@ class Window(QMainWindow):
                 for s, step in enumerate(steps):
                     self.textEdit_navigation_route.append(f"步骤{s}: " + step['instruction'])  # 假设步骤信息在instruction键中
             else:
+                # 否则显示错误信息
                 self.textEdit_navigation_route.append(data["info"])
         else:
+            # 否则显示错误信息
             self.textEdit_navigation_route.append(destination_data["info"])
 
     def clicked_btn_switch_BEV(self):
+        """
+        点击显示轨迹 按钮
+        :return:
+        """
         self.opened_other_widge = True
         self.clicked_btn_system_stop()
 
