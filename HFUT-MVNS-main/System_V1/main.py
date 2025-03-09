@@ -66,6 +66,12 @@ server_socket.listen()
 
 
 class ServerThread(QThread):
+    """
+    这段代码定义了一个名为 ServerThread 的类，继承自 QThread，用于处理客户端连接和数据传输。主要功能包括：
+    异步处理客户端连接和数据接收。
+    利用 YOLO 模型和 RoadBoundGetter 模型对接收的图像数据进行处理。
+    支持暂停和恢复服务器操作。
+    """
     update_signal = pyqtSignal(str, np.ndarray, float, float, float)
     log_signal = pyqtSignal(str)
     connection_closed_signal = pyqtSignal()
@@ -77,6 +83,10 @@ class ServerThread(QThread):
         self.road_model = RoadBoundGetter(scale=0.3, density=10, pretrain="utils/road_model_maxmIOU75.pth")
         self.YOLO_model = YOLO('utils/yolov8l-seg.pt')
         self.paused = False
+        """
+        threading.Condition 是 Python 标准库 threading 模块中的一个类，用于实现线程间的同步。
+        它允许一个或多个线程等待某个条件的满足，同时也允许其他线程在条件满足时通知等待的线程继续执行。
+        """
         self.pause_cond = threading.Condition()
 
     async def handle_client(self, client_socket, addr):
@@ -134,9 +144,21 @@ class ServerThread(QThread):
         self.log_signal.emit("Server paused")
 
     def resume(self):
+        # 将实例变量 self.paused 设置为 False，表示不再处于暂停状态。
+        # 这个变量通常用于控制某个操作（如线程的执行）是否暂停。
         self.paused = False
+
+        # 使用 with 语句进入 self.pause_cond 条件变量的上下文管理器，
+        # 这会自动调用 self.pause_cond 的 acquire() 方法获取锁。
+        # 确保在修改条件和通知等待线程时不会发生竞态条件。
         with self.pause_cond:
+            # 调用 self.pause_cond 的 notify_all() 方法，
+            # 通知所有正在等待这个条件变量的线程，条件已经满足，它们可以继续执行。
             self.pause_cond.notify_all()
+
+            # 发出一个日志信号，信号名称为 "Server resumed"。
+        # 假设 self.log_signal 是一个自定义的信号（通常是 PyQt 中的信号），
+        # 用于在 GUI 或其他部分显示日志信息。
         self.log_signal.emit("Server resumed")
 
 
@@ -308,7 +330,7 @@ class SecondWindow(QWidget):
     def initFunc(self):
         self.signal_label_collision_probability.connect(self.label_collision_probability.setStyleSheet)
         self.signal_clean_label_collision_probability.connect(
-            lambda: self.label_collision_probability.setText("Collision Probability"))
+            lambda: self.label_collision_probability.setText("Collision Probability"))  # 碰撞概率
         self.signal_clean_label_collision_probability.connect(
             lambda: self.label_collision_probability.setStyleSheet("background-color: #FAF5E4;"))
 
@@ -377,39 +399,72 @@ class SecondWindow(QWidget):
         sd.wait()  # 等待音频播放完毕
 
     def thread_play_3D_audio(self):
+        # 定义一个内部函数 conv_audio，用于对音频进行卷积处理
         def conv_audio(hrtf_left, hrtf_right, dist, wave):
+            # 对左声道的音频波形（wave[0, :]）和左耳的头相关传输函数（hrtf_left）进行卷积操作
+            # mode='same' 表示输出的长度与输入的长度相同
+            # 乘以 (1 / ((dist / 1000) ** 2)) 是为了模拟声音随着距离衰减的效果，距离越远，声音越弱
             convolved_left = fftconvolve(wave[0, :], hrtf_left, mode='same') * (1 / ((dist / 1000) ** 2))
+            # 对右声道的音频波形（wave[1, :]）和右耳的头相关传输函数（hrtf_right）进行卷积操作
+            # 同样乘以距离衰减因子
             convolved_right = fftconvolve(wave[1, :], hrtf_right, mode='same') * (1 / ((dist / 1000) ** 2))
+            # 使用 np.vstack 将卷积后的左声道和右声道信号垂直堆叠起来，然后通过 .T 进行转置
+            # 最终得到立体声信号 stereo_signal
             stereo_signal = np.vstack((convolved_left, convolved_right)).T
             return stereo_signal
 
+        # 初始化 HRFT 类的实例，加载 'utils/hrtf_nh94.sofa' 文件中的头相关传输函数数据
         hrft = HRFT('utils/hrtf_nh94.sofa')
+        # 使用 librosa 库的 load 函数加载音频文件 'utils/sounds/beep2.wav'
+        # sr=None 表示使用音频文件的原始采样率，mono=False 表示加载为立体声
         wave, sample_rate = librosa.load('utils/sounds/beep2.wav', sr=None, mono=False)
 
+        # 初始化 azimuth_pitchs 为 None，用于存储方位角和俯仰角信息
         azimuth_pitchs = None
+        # 进入一个循环，当 self.threads_running 和 self.threads_3D_playing 都为 True 时，循环继续执行
         while self.threads_running and self.threads_3D_playing:
+            # 检查 self.azimuth_pitch_s 是否不为 None 且与 azimuth_pitchs 不相等
+            # 如果满足条件，说明方位角和俯仰角信息有更新
             if self.azimuth_pitch_s is not None and azimuth_pitchs != self.azimuth_pitch_s:
+                # 将 self.azimuth_pitch_s 复制给 azimuth_pitchs
                 azimuth_pitchs = self.azimuth_pitch_s.copy()
+                # 如果 azimuth_pitchs 中的元素数量大于 3
                 if len(azimuth_pitchs) > 3:
-                    azimuth_pitchs.sort(key=lambda x: x[3])  # 根据距离排序
-                    azimuth_pitchs = azimuth_pitchs[:3]  # 取前5个最近的
+                    # 根据每个元素的第 4 个值（距离）对 azimuth_pitchs 进行排序
+                    azimuth_pitchs.sort(key=lambda x: x[3])
+                    # 取排序后的前 3 个元素，即最近的 3 个
+                    azimuth_pitchs = azimuth_pitchs[:3]
+                # 初始化一个空列表 threads，用于存储线程对象
                 threads = []
+                # 遍历 azimuth_pitchs 中的每个元素，并使用 enumerate 函数获取索引 i 和元素 ap
                 for i, ap in enumerate(azimuth_pitchs):
+                    # 将 ap 中的元素解包为 name, azimuth_angle, pitch_angle, dist
                     name, azimuth_angle, pitch_angle, dist = ap
+                    # 调用 hrft 的 get_LR_HRFT 方法，根据俯仰角和方位角获取左右耳的头相关传输函数
                     hrtf_left, hrtf_right = hrft.get_LR_HRFT(pitch_angle, azimuth_angle)
+                    # 调用 conv_audio 函数，根据获取的头相关传输函数、距离和音频波形生成立体声信号
                     stereo_signal = conv_audio(hrtf_left, hrtf_right, dist, wave)
+                    # 创建一个新的线程，线程的目标函数是 self.thread_play_audio
+                    # 传入的参数为立体声信号、采样率和延迟时间（i * 0.1）
                     thread = threading.Thread(target=self.thread_play_audio,
                                               args=(stereo_signal, sample_rate, i * 0.1))
+                    # 将创建的线程对象添加到 threads 列表中
                     threads.append(thread)
+                    # 启动线程
                     thread.start()
 
+                # 遍历 threads 列表中的每个线程，调用 join 方法等待线程执行完毕
                 for thread in threads:
                     thread.join()
 
+                # 发射信号 self.signal_update_textEdit_terminal，发送当前时间
                 self.signal_update_textEdit_terminal.emit(f'{time.time()}')
+                # 发射信号 self.signal_update_textEdit_terminal，发送方位角和俯仰角信息
                 self.signal_update_textEdit_terminal.emit(f'{azimuth_pitchs}')
+                # 发射信号 self.signal_update_textEdit_terminal，发送播放的音频数量
                 self.signal_update_textEdit_terminal.emit(f'{len(azimuth_pitchs)} 个音频已播放\n')
             else:
+                # 如果方位角和俯仰角信息没有更新，线程休眠 0.5 秒，减少 CPU 占用
                 time.sleep(0.5)
 
     def clicked_btn_run(self):
