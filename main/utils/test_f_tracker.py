@@ -141,7 +141,7 @@ class FeaturePointTrackerStreaming(FeaturePointTracker):
     def shutdown(self):
         self.device.close()
 
-# 错误点
+# 错误点，端口拥挤
 @socketio.on('connect')
 def handle_connect():
     """ 客户端连接时启动视频流 """
