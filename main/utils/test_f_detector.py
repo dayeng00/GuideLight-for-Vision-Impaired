@@ -1,14 +1,6 @@
-"""
-重写了一遍run函数，总体是把那俩视频流给提取出来干活
-"""
 
-# if __name__ == '__main__':
 from feature_point_detector import FeaturePointDetector
 from feature_point_detector import dai
-#     # 引入封装类
-# else:
-#     from utils.feature_point_detector import FeaturePointDetector
-#     from utils.feature_point_detector import dai
 from flask import Flask
 from flask_socketio import SocketIO
 import cv2
@@ -125,7 +117,7 @@ class FeaturePointStreaming(FeaturePointDetector):
 
 feature_stream = None
 
-
+# 错误点
 @socketio.on('connect')
 def handle_connect():
     """ 客户端连接时启动视频流 """
