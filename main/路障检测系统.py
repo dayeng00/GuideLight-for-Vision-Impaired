@@ -17,8 +17,8 @@ from utils.gesture_recognizer import GestureRecognizer
 from utils.moblie_net_SSD_detector import OakDMobileNetSSD
 from utils.person_detection_tracker_on_video import PersonDetectionTrackerOnVideo
 from utils.spatial_object_tracker_on_RGB import SpatialObjectTracker
-# from test_f_detector import FeaturePointStreaming
-# from test_f_tracker import FeaturePointTrackerStreaming
+from utils.feature_point_detector import FeaturePointDetector
+from utils.feature_point_tracker import FeaturePointTracker
 
 d_estimator = None
 f_detector = None
@@ -29,7 +29,7 @@ m_detector = None
 p_video = None
 s_RGB = None
 
-app = Flask(__name__, static_folder="static", template_folder="static")
+app = Flask(__name__)
 CORS(app)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:wangzishu@localhost:3306/userdata'
@@ -67,19 +67,6 @@ def exist(username):
         "category": "admin"
     }
 '''
-
-
-# 主页路由，返回 Vue 主页
-@app.route("/")
-def serve_index():
-    return send_from_directory(app.template_folder, "index.html")
-
-
-# 处理 Vue 生成的静态资源
-@app.route("/<path:path>")
-def serve_static_files(path):
-    return send_from_directory(app.static_folder, path)
-
 
 # 注册
 @app.route('/register', methods=['POST'])
@@ -178,75 +165,72 @@ def d_feed():
         return Response(d_estimator.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
-# # 启动特征点识别摄像头占用
-# @app.route('/f_detector/start_cameras', methods=['POST'])
-# def f_d_start():
-#     global f_detector
-#     if f_detector is None:
-#         f_detector = FeaturePointStreaming()
-#     return jsonify({'message': 'Cameras started'}), 200
-#
-#
-# # 停止特征点识别摄像头占用
-# @app.route('/f_detector/stop_cameras', methods=['POST'])
-# def f_d_stop():
-#     global f_detector
-#     if f_detector is not None:
-#         f_detector.shutdown()
-#         f_detector.close()
-#
-#
-# # 接收get请求返回流式视频流1
-# @app.route('/f_detector/video_feed1')
-# def f_d_feed_1():
-#     global f_detector
-#     if f_detector is not None:
-#         return Response(f_detector.show_left(), mimetype='multipart/x-mixed-replace; boundary=frame')
-#
-#
-# # 接收get请求返回流式视频流2
-# @app.route('/f_detector/video_feed2')
-# def f_d_feed_2():
-#     global f_detector
-#     if f_detector is not None:
-#         return Response(f_detector.show_right(), mimetype='multipart/x-mixed-replace; boundary=frame')
-#
-#
-# # 启动特征点识别摄像头占用
-# @app.route('/f_tracker/start_cameras', methods=['POST'])
-# def f_t_start():
-#     global f_tracker
-#     if f_tracker is None:
-#         f_tracker = FeaturePointTrackerStreaming()
-#     return jsonify({'message': 'Cameras started'}), 200
-#
-#
-# # 停止特征点识别摄像头占用
-# @app.route('/f_tracker/stop_cameras', methods=['POST'])
-# def f_t_stop():
-#     global f_tracker
-#     if f_tracker is not None:
-#         f_tracker.shutdown()
-#         f_tracker.close()
-#
-#
-# # 接收get请求返回流式视频流1
-# @app.route('/f_tracker/video_feed1')
-# def f_t_feed_1():
-#     global f_tracker
-#     if f_tracker is not None:
-#         return Response(f_tracker.show_left(), mimetype='multipart/x-mixed-replace; boundary=frame')
-#
-#
-# # 接收get请求返回流式视频流2
-# @app.route('/f_tracker/video_feed2')
-# def f_t_feed_2():
-#     global f_tracker
-#     if f_tracker is not None:
-#         return Response(f_tracker.show_right(), mimetype='multipart/x-mixed-replace; boundary=frame')
+# 启动特征点识别摄像头占用
+@app.route('/f_detector/start_cameras', methods=['POST'])
+def f_d_start():
+    global f_detector
+    if f_detector is None:
+        f_detector = FeaturePointDetector()
+        f_detector.run()
+    return jsonify({'message': 'Cameras started'}), 200
+
+# 停止特征点识别摄像头占用
+@app.route('/f_detector/stop_cameras', methods=['POST'])
+def f_d_stop():
+    global f_detector
+    if f_detector is not None:
+        f_detector.shutdown()
+        f_detector.close()
+
+# 接收get请求返回流式视频流 左
+@app.route('/f_detector/video_feed1')
+def f_d_feed_left():
+    global f_detector
+    if f_detector is not None:
+        return Response(f_detector.show_left(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    
+# 接收get请求返回流式视频流 左
+@app.route('/f_detector/video_feed2')
+def f_d_feed_right():
+    global f_detector
+    if f_detector is not None:
+        return Response(f_detector.show_right(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
-# 启动手势特征点识别摄像头占用
+# f_tracker
+@app.route('f_tracker/start_camera', methods=['POST'])
+def f_t_start():
+    global f_tracker
+    if f_tracker is None:
+        # 启动摄像头 处理视频流
+        f_tracker = FeaturePointTracker()
+        f_tracker.run()
+        return jsonify({'message':'Camera started'}), 200
+# f_tracker stop using this
+@app.route('f_tracker/stop_camera', methods=['POST'])
+def f_t_stop():
+    global f_tracker
+    if f_tracker is not None:
+        # TODO 调用shutdown函数 中断摄像头控制
+        return jsonify({'message': "Camera stoped"}), 200
+    
+@app.route('f_tracker/video_feed1')
+def f_t_feed_left():
+    # TODO 返回视频流
+    global f_tracker
+    if f_tracker is not None:
+        return Response(f_tracker.show_left(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('f_tracker/video_feed2')
+def f_t_feed_right():
+    # TODO 返回视频流
+    global f_tracker
+    if f_tracker is not None:
+        return Response(f_tracker.show_right(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+
+# 启动 手势特征点 识别摄像头占用
 @app.route('/g_recognition/start_cameras', methods=['POST'])
 def g_start():
     global g_recognition
@@ -255,7 +239,7 @@ def g_start():
     return jsonify({'message': 'Cameras started'}), 200
 
 
-# 停止手势特征点识别摄像头占用
+# 停止 手势特征点 识别摄像头占用
 @app.route('/g_recognition/stop_cameras', methods=['POST'])
 def g_stop():
     global g_recognition
@@ -334,7 +318,7 @@ def p_start():
 
 
 # 停止人像追踪摄像头占用
-@app.route('/p_video/stop_cameras', methods=['POST'])
+@app.route('/m_detector/stop_cameras', methods=['POST'])
 def p_stop():
     global p_video
     if p_video is not None:
@@ -343,7 +327,7 @@ def p_stop():
 
 
 # 接收get请求返回流式视频流
-@app.route('/p_video/video_feed')
+@app.route('/m_detector/video_feed')
 def p_feed():
     global p_video
     if p_video is not None:
@@ -377,4 +361,4 @@ def s_feed():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host="localhost", port=5000)
+    app.run(threaded=True,debug=True, host="localhost", port=5000)

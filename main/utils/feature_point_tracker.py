@@ -5,10 +5,7 @@ import cv2
 import time
 import depthai as dai
 from collections import deque
-if __name__ == "__main__":
-    from video_show import VideoShowOAK
-else:
-    from utils.video_show import VideoShowOAK
+from utils.video_show import VideoShowOAK
 
 
 class FeaturePointTrackerDrawer:
@@ -19,6 +16,7 @@ class FeaturePointTrackerDrawer:
     trackedFeaturesPathLength = 10
 
     def __init__(self, trackbarName, windowName):
+
         self.trackbarName = trackbarName
         self.windowName = windowName
         cv2.namedWindow(windowName)
@@ -79,6 +77,10 @@ class FeaturePointTracker(VideoShowOAK):
         """
         super().__init__(camera_size=camera_size, is_show_fps=is_show_fps)
 
+        # 2025/3/27 NEW：左右视频流
+        self.rightFrame = None
+        self.leftFrame = None
+
         self.featureTrackerLeft = self.pipeline.create(dai.node.FeatureTracker)
         self.featureTrackerRight = self.pipeline.create(dai.node.FeatureTracker)
 
@@ -113,13 +115,15 @@ class FeaturePointTracker(VideoShowOAK):
 
         self.motion_estimation = motion_estimation
 
+        self.device = None
+
     def run(self):
-        with dai.Device(self.pipeline) as device:
-            passthroughImageLeftQueue = device.getOutputQueue("passthroughFrameLeft", 8, False)
-            outputFeaturesLeftQueue = device.getOutputQueue("trackedFeaturesLeft", 8, False)
-            passthroughImageRightQueue = device.getOutputQueue("passthroughFrameRight", 8, False)
-            outputFeaturesRightQueue = device.getOutputQueue("trackedFeaturesRight", 8, False)
-            inputFeatureTrackerConfigQueue = device.getInputQueue("trackedFeaturesConfig")
+        with dai.Device(self.pipeline) as self.device:
+            passthroughImageLeftQueue = self.device.getOutputQueue("passthroughFrameLeft", 8, False)
+            outputFeaturesLeftQueue = self.device.getOutputQueue("trackedFeaturesLeft", 8, False)
+            passthroughImageRightQueue = self.device.getOutputQueue("passthroughFrameRight", 8, False)
+            outputFeaturesRightQueue = self.device.getOutputQueue("trackedFeaturesRight", 8, False)
+            inputFeatureTrackerConfigQueue = self.device.getInputQueue("trackedFeaturesConfig")
 
             leftWindowName = "left"
             leftFeatureDrawer = FeaturePointTrackerDrawer("Feature tracking duration (frames)", leftWindowName)
@@ -165,13 +169,45 @@ class FeaturePointTracker(VideoShowOAK):
                 leftFrame = cv2.resize(leftFrame, (int(self.camera_size * 1280 / 720), int(self.camera_size)))
                 rightFrame = cv2.resize(rightFrame, (int(self.camera_size * 1280 / 720), int(self.camera_size)))
 
-                cv2.imshow(leftWindowName, leftFrame)
-                cv2.imshow(rightWindowName, rightFrame)
+                self.leftFrame = leftFrame
+                self.rightFrame = rightFrame
+                
+                
+                # cv2.imshow(leftWindowName, leftFrame)
+                # cv2.imshow(rightWindowName, rightFrame)
 
                 key = cv2.waitKey(1)
 
                 if not self.continue_running:
                     break
+    # 2025/3/27 NEW: 左视频流
+    def show_left(self):
+        # FIXME tobytes函数检验
+        leftFrame = self.leftFrame
+        if leftFrame:
+            _, buffer = cv2.imencode('jpg',leftFrame)
+            frame_bytes = buffer.tobytes()
+
+            # 以 MJPEG 格式返回
+            yield (b'--frame\r\n'
+                            b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+    # 2025/3/27 NEW: 右视频流
+    def show_right(self):
+        # FIXME tobytes函数检验
+        rightFrame = self.rightFrame
+        if rightFrame:
+            _, buffer = cv2.imencode('jpg', rightFrame)
+            frame_bytes = buffer.tobytes()
+
+            yield(b'--frame\r\n'
+                            b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            
+            
+    # TODO 补充shutdown函数关闭停止摄像头调用
+    def shut_down(self):
+        self.device.close()
+
 
 
 if __name__ == "__main__":

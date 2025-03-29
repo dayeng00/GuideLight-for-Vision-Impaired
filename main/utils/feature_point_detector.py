@@ -1,12 +1,20 @@
 """
 特征点检测
 """
+'''
+错误原因主要是因为 路障检测系统.py ，前端请求视频流是从左右两个摄像头同时调画面，端口拥挤造成报错。socket 可以直接转为 流式传输 ，问题不大。
+需求：同时接收两个视频流并展示在前端页面
+前提：一个端口只能同时承载一个视频流。
+双端口：
+解决方案1 ： 开两个端口并写两个 返回视频流 函数                   （更改成本更低）
+解决方案2 ： 开两个端口并继承 feature 写 left right 子类
+单端口：
+解决方案1： ？？？ 直接threaded=True 即可？？？？
+
+'''
 import cv2
 import time
-if __name__ == "__main__":
-    from video_show import VideoShowOAK
-else:
-    from utils.video_show import VideoShowOAK
+from utils.video_show import VideoShowOAK
 import depthai as dai
 from flask_socketio import SocketIO
 import base64
@@ -20,7 +28,6 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 class FeaturePointDetector(VideoShowOAK):
     def __init__(self, camera_size=720, is_show_fps=True, corner_detector="harris"):
         """
-
         :param camera_size:
         :param is_show_fps:
         :param corner_detector:角点检测方法:"harris"、"shi_thomasi" 默认"harris"(开销较低 性能较低)
@@ -29,6 +36,10 @@ class FeaturePointDetector(VideoShowOAK):
         super().__init__(is_show_fps=is_show_fps, camera_size=camera_size)
 
         self.inputFeatureTrackerConfigQueue = None
+
+        #  2025/3/27 NEW： 左右视频流
+        self.leftFrame = None
+        self.rightFrame = None
 
         # 定义输入源和输出
         self.featureTrackerLeft = self.pipeline.create(dai.node.FeatureTracker)  # 创建左侧特征跟踪节点
@@ -102,8 +113,8 @@ class FeaturePointDetector(VideoShowOAK):
             self.inputFeatureTrackerConfigQueue.send(cfg)  # 更新特征跟踪配置
 
             # 设置显示窗口的名称
-            leftWindowName = "left"
-            rightWindowName = "right"
+            # leftWindowName = "left"
+            # rightWindowName = "right"
 
             while True:
                 # 获取左侧相机的传递帧
@@ -132,24 +143,46 @@ class FeaturePointDetector(VideoShowOAK):
                 left_frame = cv2.resize(leftFrame, (int(self.camera_size * 1280 / 720), int(self.camera_size)))
                 right_frame = cv2.resize(rightFrame, (int(self.camera_size * 1280 / 720), int(self.camera_size)))
 
-                if __name__ == "__main__":
-                    cv2.imshow(leftWindowName, left_frame)
-                    cv2.imshow(rightWindowName, right_frame)
-                    cv2.waitKey(1)
-                else:
-                    # 新增：转换为 Base64 并通过 WebSocket 发送
-                    _, buffer_left = cv2.imencode('.jpg', leftFrame)
-                    _, buffer_right = cv2.imencode('.jpg', rightFrame)
+                self.leftFrame = left_frame
+                self.rightFrame = right_frame
+                # # **新增：转换为 Base64 并通过 WebSocket 发送**
+                # _, buffer_left = cv2.imencode('.jpg', leftFrame)
+                # _, buffer_right = cv2.imencode('.jpg', rightFrame)
 
-                    left_base64 = base64.b64encode(buffer_left).decode('utf-8')
-                    right_base64 = base64.b64encode(buffer_right).decode('utf-8')
+                # left_base64 = base64.b64encode(buffer_left).decode('utf-8')
+                # right_base64 = base64.b64encode(buffer_right).decode('utf-8')
 
-                    socketio.emit('video_stream', {'id': 1, 'frame': left_base64})
-                    socketio.emit('video_stream', {'id': 2, 'frame': right_base64})
+                # socketio.emit('video_stream', {'id': 1, 'frame': left_base64})
+                # socketio.emit('video_stream', {'id': 2, 'frame': right_base64})
+
+                # # cv2.waitKey(1)  # 获取按键
+
+                # TODO: 转左右流流式传输
 
                 if not self.continue_running:
                     break
+    # 2025/3/27 NEW：流式传输返回左视频流
+    def show_left(self):
+        left_frame = self.leftFrame
 
+        _, buffer = cv2.imencode('.jpg', left_frame)
+        frame_bytes = buffer.tobytes()
+
+        # 以 MJPEG 格式返回
+        yield (b'--frame\r\n'
+                        b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+    # 2025/3/27 NEW：流式传输返回右视频流   
+    def show_right(self):
+        right_frame = self.rightFrame
+
+        _, buffer = cv2.imencode('.jpg', right_frame)
+        frame_bytes = buffer.tobytes()
+
+        # 流式传输 MJPEG 即视频流
+        yield (b'--frame\r\n'
+                        b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n') 
+
+    # 2025/3/27 NEW: 撤销调用
     def shutdown(self):
         self.device.close()
 
