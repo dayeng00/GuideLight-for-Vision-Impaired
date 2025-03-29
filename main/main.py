@@ -20,6 +20,7 @@ from utils.spatial_object_tracker_on_RGB import SpatialObjectTracker
 from utils.feature_point_detector import FeaturePointDetector
 from utils.feature_point_tracker import FeaturePointTracker
 
+
 d_estimator = None
 f_detector = None
 f_tracker = None
@@ -180,7 +181,7 @@ def f_d_stop():
     global f_detector
     if f_detector is not None:
         f_detector.shutdown()
-        f_detector.close()
+        return jsonify({'message': 'Cameras stoped'}), 200
 
 # 接收get请求返回流式视频流 左
 @app.route('/f_detector/video_feed1')
@@ -197,36 +198,39 @@ def f_d_feed_right():
         return Response(f_detector.show_right(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
-# f_tracker
-@app.route('f_tracker/start_camera', methods=['POST'])
-def f_t_start():
-    global f_tracker
-    if f_tracker is None:
-        # 启动摄像头 处理视频流
-        f_tracker = FeaturePointTracker()
-        f_tracker.run()
-        return jsonify({'message':'Camera started'}), 200
-# f_tracker stop using this
-@app.route('f_tracker/stop_camera', methods=['POST'])
-def f_t_stop():
-    global f_tracker
-    if f_tracker is not None:
-        # TODO 调用shutdown函数 中断摄像头控制
-        return jsonify({'message': "Camera stoped"}), 200
+# # f_tracker
+# @app.route('f_tracker/start_camera', methods=['POST'])
+# def f_t_start():
+#     global f_tracker
+#     if f_tracker is None:
+#         # 启动摄像头 处理视频流
+#         f_tracker = FeaturePointTracker()
+#         f_tracker.run()
+#         return jsonify({'message':'Camera started'}), 200
     
-@app.route('f_tracker/video_feed1')
-def f_t_feed_left():
-    # TODO 返回视频流
-    global f_tracker
-    if f_tracker is not None:
-        return Response(f_tracker.show_left(), mimetype='multipart/x-mixed-replace; boundary=frame')
+# # f_tracker stop using this
+# @app.route('f_tracker/stop_camera', methods=['POST'])
+# def f_t_stop():
+#     global f_tracker
+#     if f_tracker is not None:
+#         # 调用shutdown函数 中断摄像头控制
+#         f_tracker.shut_down()
+        
+#         return jsonify({'message': "Camera stoped"}), 200
+    
+# @app.route('f_tracker/video_feed1')
+# def f_t_feed_left():
+#     # 返回视频流
+#     global f_tracker
+#     if f_tracker is not None:
+#         return Response(f_tracker.show_left(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-@app.route('f_tracker/video_feed2')
-def f_t_feed_right():
-    # TODO 返回视频流
-    global f_tracker
-    if f_tracker is not None:
-        return Response(f_tracker.show_right(), mimetype='multipart/x-mixed-replace; boundary=frame')
+# @app.route('f_tracker/video_feed2')
+# def f_t_feed_right():
+#     # 返回视频流
+#     global f_tracker
+#     if f_tracker is not None:
+#         return Response(f_tracker.show_right(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 

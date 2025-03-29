@@ -112,9 +112,9 @@ class FeaturePointDetector(VideoShowOAK):
             cfg.set(self.featureTrackerConfig)
             self.inputFeatureTrackerConfigQueue.send(cfg)  # 更新特征跟踪配置
 
-            # 设置显示窗口的名称
-            # leftWindowName = "left"
-            # rightWindowName = "right"
+            #设置显示窗口的名称
+            leftWindowName = "left"
+            rightWindowName = "right"
 
             while True:
                 # 获取左侧相机的传递帧
