@@ -186,21 +186,22 @@ with dai.Device(pipeline) as device:
         trackerFrame = trackFrame.getCvFrame()
         trackletsData = track.tracklets
         for t in trackletsData:
-            roi = t.roi.denormalize(trackerFrame.shape[1], trackerFrame.shape[0])  # 反归一化ROI
-            x1 = int(roi.topLeft().x)
-            y1 = int(roi.topLeft().y)
-            x2 = int(roi.bottomRight().x)
-            y2 = int(roi.bottomRight().y)
+            if t.status.name != 'LOST':
+                roi = t.roi.denormalize(trackerFrame.shape[1], trackerFrame.shape[0])  # 反归一化ROI
+                x1 = int(roi.topLeft().x)
+                y1 = int(roi.topLeft().y)
+                x2 = int(roi.bottomRight().x)
+                y2 = int(roi.bottomRight().y)
 
-            try:
-                label = labelMap[t.label]  # 获取标签
-            except:
-                label = t.label
+                try:
+                    label = labelMap[t.label]  # 获取标签
+                except:
+                    label = t.label
 
-            cv2.putText(trackerFrame, str(label), (x1 + 10, y1 + 20), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)  # 绘制标签
-            cv2.putText(trackerFrame, f"ID: {[t.id]}", (x1 + 10, y1 + 35), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)  # 绘制ID
-            cv2.putText(trackerFrame, t.status.name, (x1 + 10, y1 + 50), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)  # 绘制状态
-            cv2.rectangle(trackerFrame, (x1, y1), (x2, y2), color, cv2.FONT_HERSHEY_SIMPLEX)  # 绘制边界框
+                cv2.putText(trackerFrame, str(label), (x1 + 10, y1 + 20), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)  # 绘制标签
+                cv2.putText(trackerFrame, f"ID: {[t.id]}", (x1 + 10, y1 + 35), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)  # 绘制ID
+                cv2.putText(trackerFrame, t.status.name, (x1 + 10, y1 + 50), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)  # 绘制状态
+                cv2.rectangle(trackerFrame, (x1, y1), (x2, y2), color, cv2.FONT_HERSHEY_SIMPLEX)  # 绘制边界框
 
         # 显示FPS
         cv2.putText(trackerFrame, "Fps: {:.2f}".format(fps), (2, trackerFrame.shape[0] - 4), cv2.FONT_HERSHEY_TRIPLEX, 0.4, color)
