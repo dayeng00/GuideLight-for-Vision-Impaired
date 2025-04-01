@@ -2224,24 +2224,24 @@ class Window(QMainWindow):
             depth = self.img_D.copy()
 
             # 人行道识别及处理
-            # road_masked = self.road_model(self.img_BGR)[0].cpu()
-            # perception_background[road_masked == 1] = (233, 233, 233)
-            # rows, cols = np.where((road_masked == 1) & (self.img_D != 0))
-            # if len(rows) > 0 and len(cols) > 0:
-            #     distances = self.img_D[rows, cols]
-            #     # # 计算百分位数
-            #     # percentile_low = 5
-            #     # percentile_high = 95
-            #     # low_threshold = np.percentile(distances, percentile_low)
-            #     # high_threshold = np.percentile(distances, percentile_high)
-            #     # # 选择符合条件的数据
-            #     # selected_rows = rows[(distances >= low_threshold) & (distances <= high_threshold)]
-            #     # selected_cols = cols[(distances >= low_threshold) & (distances <= high_threshold)]
-            #     # selected_distances = distances[(distances >= low_threshold) & (distances <= high_threshold)]
-            #     bboxes = np.column_stack([cols, rows, cols, rows])
-            #     BEV_x = np.clip((500 - getSpatialCoordinates(distances, bboxes, 'x') / 10).astype(int), 0, 999)
-            #     BEV_y = np.clip((1000 - distances / 10).astype(int), 0, 999)
-            #     BEV[BEV_y, BEV_x] = (233, 233, 233)
+            road_masked = self.road_model(self.img_BGR)[0].cpu()
+            perception_background[road_masked == 1] = (233, 233, 233)
+            rows, cols = np.where((road_masked == 1) & (self.img_D != 0))
+            if len(rows) > 0 and len(cols) > 0:
+                distances = self.img_D[rows, cols]
+                # # 计算百分位数
+                # percentile_low = 5
+                # percentile_high = 95
+                # low_threshold = np.percentile(distances, percentile_low)
+                # high_threshold = np.percentile(distances, percentile_high)
+                # # 选择符合条件的数据
+                # selected_rows = rows[(distances >= low_threshold) & (distances <= high_threshold)]
+                # selected_cols = cols[(distances >= low_threshold) & (distances <= high_threshold)]
+                # selected_distances = distances[(distances >= low_threshold) & (distances <= high_threshold)]
+                bboxes = np.column_stack([cols, rows, cols, rows])
+                BEV_x = np.clip((500 - getSpatialCoordinates(distances, bboxes, 'x') / 10).astype(int), 0, 999)
+                BEV_y = np.clip((1000 - distances / 10).astype(int), 0, 999)
+                BEV[BEV_y, BEV_x] = (233, 233, 233)
 
             # YOLO
             object_result = self.YOLO_model(self.img_BGR, verbose=False)[0]
