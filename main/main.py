@@ -6,19 +6,31 @@
     所以现在我需要把端口分化
 '''
 
-from flask import Flask, request, jsonify, Response, send_from_directory
+# 确保eventlet的monkey_patch在其他所有导入之前
+import eventlet
+eventlet.monkey_patch()
+
+import os
+import atexit
+from flask import Flask, request, jsonify, Response, send_from_directory, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 # 引入各类视频流
-from utils.disparity_estimator import DisparityEstimator
-from utils.gesture_point_recognition import GesturePointRecognition
-from utils.gesture_recognizer import GestureRecognizer
-from utils.moblie_net_SSD_detector import OakDMobileNetSSD
-from utils.person_detection_tracker_on_video import PersonDetectionTrackerOnVideo
-from utils.spatial_object_tracker_on_RGB import SpatialObjectTracker
-from utils.feature_point_detector import FeaturePointDetector
-from utils.feature_point_tracker import FeaturePointTracker
+try:
+    from utils.disparity_estimator import DisparityEstimator
+    from utils.gesture_point_recognition import GesturePointRecognition
+    from utils.gesture_recognizer import GestureRecognizer
+    from utils.moblie_net_SSD_detector import OakDMobileNetSSD
+    from utils.person_detection_tracker_on_video import PersonDetectionTrackerOnVideo
+    from utils.spatial_object_tracker_on_RGB import SpatialObjectTracker
+    from utils.feature_point_detector import FeaturePointDetector
+    from utils.feature_point_tracker import FeaturePointTracker
+    video_modules_available = True
+except Exception as e:
+    print(f"导入视频流模块时出错: {e}")
+    print("部分功能可能不可用")
+    video_modules_available = False
 
 
 d_estimator = None
@@ -31,13 +43,20 @@ p_video = None
 s_RGB = None
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:wangzishu@localhost:3306/userdata'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # 禁用对象修改追踪（可选）
-
-# 初始化 SQLAlchemy
-db = SQLAlchemy(app)
+try:
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:wangzishu@localhost:3306/userdata'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # 禁用对象修改追踪（可选）
+    db = SQLAlchemy(app)
+    db_available = True
+except Exception as e:
+    print(f"数据库连接错误: {e}")
+    print("使用SQLite作为备用数据库")
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///userdata.db'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    db = SQLAlchemy(app)
+    db_available = False
 
 
 # 用户数据类
@@ -144,18 +163,26 @@ def record():
 @app.route('/d_estimator/start_cameras', methods=['POST'])
 def d_start():
     global d_estimator
-    if d_estimator is None:
-        d_estimator = DisparityEstimator()
-    return jsonify({'message': 'Cameras started'}), 200
+    try:
+        if d_estimator is None:
+            d_estimator = DisparityEstimator()
+        return jsonify({'message': 'Cameras started'}), 200
+    except Exception as e:
+        return jsonify({'message': f'启动失败: {str(e)}'}), 500
 
 
 # 停止视差估计摄像头占用
 @app.route('/d_estimator/stop_cameras', methods=['POST'])
 def d_stop():
     global d_estimator
-    if d_estimator is not None:
-        d_estimator.shutdown()
-        d_estimator.close()
+    try:
+        if d_estimator is not None:
+            d_estimator.shutdown()
+            d_estimator = None
+            return jsonify({'message': 'Cameras stopped'}), 200
+        return jsonify({'message': 'Cameras already stopped'}), 200
+    except Exception as e:
+        return jsonify({'message': f'停止失败: {str(e)}'}), 500
 
 
 # 接收get请求返回流式视频流
@@ -164,24 +191,34 @@ def d_feed():
     global d_estimator
     if d_estimator is not None:
         return Response(d_estimator.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    else:
+        abort(404, description="视频流未初始化")
 
 
 # 启动特征点识别摄像头占用
 @app.route('/f_detector/start_cameras', methods=['POST'])
 def f_d_start():
     global f_detector
-    if f_detector is None:
-        f_detector = FeaturePointDetector()
-        f_detector.run()
-    return jsonify({'message': 'Cameras started'}), 200
+    try:
+        if f_detector is None:
+            f_detector = FeaturePointDetector()
+            f_detector.run()
+        return jsonify({'message': 'Cameras started'}), 200
+    except Exception as e:
+        return jsonify({'message': f'启动失败: {str(e)}'}), 500
 
 # 停止特征点识别摄像头占用
 @app.route('/f_detector/stop_cameras', methods=['POST'])
 def f_d_stop():
     global f_detector
-    if f_detector is not None:
-        f_detector.shutdown()
-        return jsonify({'message': 'Cameras stoped'}), 200
+    try:
+        if f_detector is not None:
+            f_detector.shutdown()
+            f_detector = None
+            return jsonify({'message': 'Cameras stopped'}), 200
+        return jsonify({'message': 'Cameras already stopped'}), 200
+    except Exception as e:
+        return jsonify({'message': f'停止失败: {str(e)}'}), 500
 
 # 接收get请求返回流式视频流 左
 @app.route('/f_detector/video_feed1')
@@ -189,6 +226,8 @@ def f_d_feed_left():
     global f_detector
     if f_detector is not None:
         return Response(f_detector.show_left(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    else:
+        abort(404, description="视频流未初始化")
     
 # 接收get请求返回流式视频流 左
 @app.route('/f_detector/video_feed2')
@@ -196,6 +235,8 @@ def f_d_feed_right():
     global f_detector
     if f_detector is not None:
         return Response(f_detector.show_right(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    else:
+        abort(404, description="视频流未初始化")
 
 
 # # f_tracker
@@ -238,18 +279,26 @@ def f_d_feed_right():
 @app.route('/g_recognition/start_cameras', methods=['POST'])
 def g_start():
     global g_recognition
-    if g_recognition is None:
-        g_recognition = GesturePointRecognition()
-    return jsonify({'message': 'Cameras started'}), 200
+    try:
+        if g_recognition is None:
+            g_recognition = GesturePointRecognition()
+        return jsonify({'message': 'Cameras started'}), 200
+    except Exception as e:
+        return jsonify({'message': f'启动失败: {str(e)}'}), 500
 
 
 # 停止 手势特征点 识别摄像头占用
 @app.route('/g_recognition/stop_cameras', methods=['POST'])
 def g_stop():
     global g_recognition
-    if g_recognition is not None:
-        g_recognition.shutdown()
-        g_recognition.close()
+    try:
+        if g_recognition is not None:
+            g_recognition.shutdown()
+            g_recognition = None
+            return jsonify({'message': 'Cameras stopped'}), 200
+        return jsonify({'message': 'Cameras already stopped'}), 200
+    except Exception as e:
+        return jsonify({'message': f'停止失败: {str(e)}'}), 500
 
 
 # 接收get请求返回流式视频流
@@ -258,102 +307,151 @@ def g_feed():
     global g_recognition
     if g_recognition is not None:
         return Response(g_recognition.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    else:
+        abort(404, description="视频流未初始化")
 
 
 # 启动手势类别判断摄像头占用
 @app.route('/g_recognizer/start_cameras', methods=['POST'])
 def r_start():
     global g_recognizer
-    if g_recognizer is None:
-        g_recognizer = GestureRecognizer()
-    return jsonify({'message': 'Cameras started'}), 200
+    try:
+        if g_recognizer is None:
+            g_recognizer = GestureRecognizer()
+        return jsonify({'message': 'Cameras started'}), 200
+    except Exception as e:
+        print(f"启动失败: {str(e)}")
+        return jsonify({'message': f'启动失败: {str(e)}'}), 500
 
 
 # 停止手势类别判断摄像头占用
 @app.route('/g_recognizer/stop_cameras', methods=['POST'])
 def r_stop():
     global g_recognizer
-    if g_recognizer is not None:
-        g_recognizer.shutdown()
-        g_recognizer.close()
+    try:
+        if g_recognizer is not None:
+            g_recognizer.shutdown()
+            g_recognizer = None
+            return jsonify({'message': 'Cameras stopped'}), 200
+        return jsonify({'message': 'Cameras already stopped'}), 200
+    except Exception as e:
+        return jsonify({'message': f'停止失败: {str(e)}'}), 500
 
 
 # 接收get请求返回流式视频流
 @app.route('/g_recognizer/video_feed')
 def r_feed():
-    global g_recognizer
-    if g_recognizer is not None:
-        return Response(g_recognizer.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    try:
+        print("g_recognizer is not None")
+        global g_recognizer
+        if g_recognizer is not None:
+            return Response(g_recognizer.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
+        else:
+            abort(404, description="视频流未初始化")
+    except Exception as e:
+        print(f"获取视频流失败: {str(e)}")
+        return jsonify({'message': f'获取视频流失败: {str(e)}'}), 500
 
 
 # 启动MobileNetSSD 目标检测摄像头占用
 @app.route('/m_detector/start_cameras', methods=['POST'])
 def m_start():
     global m_detector
-    if m_detector is None:
-        m_detector = OakDMobileNetSSD()
-    return jsonify({'message': 'Cameras started'}), 200
+    try:
+        if m_detector is None:
+            m_detector = OakDMobileNetSSD()
+        return jsonify({'message': 'Cameras started'}), 200
+    except Exception as e:
+        return jsonify({'message': f'启动失败: {str(e)}'}), 500
 
 
 # 停止MobileNetSSD 目标检测摄像头占用
 @app.route('/m_detector/stop_cameras', methods=['POST'])
 def m_stop():
     global m_detector
-    if m_detector is not None:
-        m_detector.shutdown()
-        m_detector.close()
+    try:
+        if m_detector is not None:
+            m_detector.shutdown()
+            m_detector = None
+            return jsonify({'message': 'Cameras stopped'}), 200
+        return jsonify({'message': 'Cameras already stopped'}), 200
+    except Exception as e:
+        return jsonify({'message': f'停止失败: {str(e)}'}), 500
 
 
 # 接收get请求返回流式视频流
 @app.route('/m_detector/video_feed')
 def m_feed():
     global m_detector
-    if m_detector is not None:
-        return Response(m_detector.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    try:
+        if m_detector is not None:
+            return Response(m_detector.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
+        else:
+            abort(404, description="视频流未初始化")
+    except Exception as e:
+        return jsonify({'message': f'获取视频流失败: {str(e)}'}), 500
 
 
 # 启动人像追踪摄像头占用
 @app.route('/p_video/start_cameras', methods=['POST'])
 def p_start():
     global p_video
-    if p_video is None:
-        p_video = PersonDetectionTrackerOnVideo()
-    return jsonify({'message': 'Cameras started'}), 200
+    try:
+        if p_video is None:
+            p_video = PersonDetectionTrackerOnVideo()
+        return jsonify({'message': 'Cameras started'}), 200
+    except Exception as e:
+        return jsonify({'message': f'启动失败: {str(e)}'}), 500
 
 
 # 停止人像追踪摄像头占用
-@app.route('/m_detector/stop_cameras', methods=['POST'])
+@app.route('/p_video/stop_cameras', methods=['POST'])
 def p_stop():
     global p_video
-    if p_video is not None:
-        p_video.shutdown()
-        p_video.close()
+    try:
+        if p_video is not None:
+            p_video.shutdown()
+            p_video = None
+            return jsonify({'message': 'Cameras stopped'}), 200
+        return jsonify({'message': 'Cameras already stopped'}), 200
+    except Exception as e:
+        return jsonify({'message': f'停止失败: {str(e)}'}), 500
 
 
 # 接收get请求返回流式视频流
-@app.route('/m_detector/video_feed')
+@app.route('/p_video/video_feed')
 def p_feed():
     global p_video
     if p_video is not None:
         return Response(p_video.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    else:
+        abort(404, description="视频流未初始化")
 
 
 # 启动RGB摄像头占用
 @app.route('/s_RGB/start_cameras', methods=['POST'])
 def s_start():
     global s_RGB
-    if s_RGB is None:
-        s_RGB = SpatialObjectTracker()
-    return jsonify({'message': 'Cameras started'}), 200
+    try:
+        if s_RGB is None:
+            s_RGB = SpatialObjectTracker()
+        return jsonify({'message': 'Cameras started'}), 200
+    except Exception as e:
+        return jsonify({'message': f'启动失败: {str(e)}'}), 500
 
 
 # 停止RGB摄像头占用
 @app.route('/s_RGB/stop_cameras', methods=['POST'])
 def s_stop():
     global s_RGB
-    if s_RGB is not None:
-        s_RGB.shutdown()
-        s_RGB.close()
+    try:
+        if s_RGB is not None:
+            s_RGB.shutdown()
+            s_RGB = None
+            return jsonify({'message': 'Cameras stopped'}), 200
+        return jsonify({'message': 'Cameras already stopped'}), 200
+    except Exception as e:
+        return jsonify({'message': f'停止失败: {str(e)}'}), 500
 
 
 # 接收get请求返回流式视频流
@@ -362,7 +460,68 @@ def s_feed():
     global s_RGB
     if s_RGB is not None:
         return Response(s_RGB.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    else:
+        abort(404, description="视频流未初始化")
 
+
+# 添加主页和API健康检查
+@app.route('/')
+def home():
+    return send_from_directory('static', 'index.html')
+
+@app.route('/utils-explorer')
+def utils_explorer():
+    return send_from_directory('static', 'utils-explorer.html')
+
+@app.route('/api/health')
+def health_check():
+    status = {
+        'status': 'online',
+        'modules': {
+            'video_modules': video_modules_available,
+            'database': db_available
+        },
+        'cameras': {
+            'd_estimator': d_estimator is not None,
+            'f_detector': f_detector is not None,
+            'g_recognition': g_recognition is not None,
+            'g_recognizer': g_recognizer is not None,
+            'm_detector': m_detector is not None,
+            'p_video': p_video is not None,
+            's_RGB': s_RGB is not None
+        }
+    }
+    return jsonify(status)
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Not found', 'message': str(error)}), 404
+
+@app.errorhandler(500)
+def server_error(error):
+    return jsonify({'error': 'Internal server error', 'message': str(error)}), 500
+
+# 确保所有摄像头在程序退出时正确关闭
+def cleanup():
+    global d_estimator, f_detector, g_recognition, g_recognizer, m_detector, p_video, s_RGB
+    
+    for camera in [d_estimator, f_detector, g_recognition, g_recognizer, m_detector, p_video, s_RGB]:
+        if camera is not None:
+            try:
+                camera.shutdown()
+            except:
+                pass
+
+atexit.register(cleanup)
 
 if __name__ == '__main__':
-    app.run(threaded=True,debug=True, host="localhost", port=5000)
+    import sys
+    port = 5000
+    if len(sys.argv) > 1:
+        try:
+            port = int(sys.argv[1])
+        except ValueError:
+            print(f"无效的端口号: {sys.argv[1]}, 使用默认端口5000")
+    
+    print(f"服务器正在运行，访问 http://localhost:{port}")
+    app.run(threaded=True, debug=True, host="localhost", port=port)

@@ -89,6 +89,25 @@ class ServerThread(QThread):
         """
         self.pause_cond = threading.Condition()
 
+    '''
+        处理客户端连接和数据接收的异步函数。
+
+        输入： 客户端套接字（client_socket）和客户端地址（addr）
+        输出： 
+            通过 self.log_signal.emit(f"Connected by {addr}") 发出一个日志信号，
+            用于在 GUI 或其他部分显示连接信息。
+
+            然后进入一个无限循环，不断接收客户端发送的数据。
+            在循环中，首先通过 self.pause_cond.wait() 等待条件变量 self.pause_cond 的通知。
+            
+            如果 self.paused 为 True，则通过 self.pause_cond.wait() 等待条件变量 self.pause_cond 的通知。
+            
+            如果 self.paused 为 False，则通过 self.loop.sock_recv(client_socket, 4096) 接收客户端发送的数据。
+            
+            如果数据结束标志 b'$END#' 被检测到，则将数据转换为字典对象，并存储在 received_data 变量中。
+            
+        
+    '''
     async def handle_client(self, client_socket, addr):
         self.log_signal.emit(f"Connected by {addr}")
         while True:
@@ -1394,7 +1413,9 @@ class cloud_service_window(QWidget):
             self.ServerApp.close()
         event.accept()
 
-
+'''
+    主窗口类，基于此发散各类需处理的函数
+'''
 class Window(QMainWindow):
     # Qpixmap 用于在屏幕上显示图象
     signal_update_label_L_MONO = pyqtSignal(QPixmap)  # 用于更新左目相机图像标签的信号
