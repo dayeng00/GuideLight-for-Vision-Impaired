@@ -158,7 +158,20 @@ def record():
         print('No users found')
         return jsonify({'message': f'No users found with name {username}'}), 404
 
-
+@app.route('/location', methods=['GET'])
+def location():
+    # TODO 从学长代码中拿取经纬坐标，流式传输来实现动态变化
+    # 合肥工业大学屯溪路校区
+    location = {
+        "name": "合肥工业大学",
+        "lng": 117.283042,  # 经度
+        "lat": 31.844786    # 纬度
+    }
+    return jsonify({
+        "code": 200,
+        "data": [location]
+    })
+    
 # 启动视差估计摄像头占用
 @app.route('/d_estimator/start_cameras', methods=['POST'])
 def d_start():
@@ -277,38 +290,51 @@ def f_d_feed_right():
 
 # 启动 手势特征点 识别摄像头占用
 @app.route('/g_recognition/start_cameras', methods=['POST'])
-def g_start():
-    global g_recognition
+def g_recognition_start():
+    """启动手势识别摄像头"""
     try:
+        global g_recognition
         if g_recognition is None:
-            g_recognition = GesturePointRecognition()
-        return jsonify({'message': 'Cameras started'}), 200
+            g_recognition = GesturePointRecognition(output_size=(720, 720))
+            g_recognition.start()
+            return jsonify({'message': 'Cameras started'}), 200
+        else:
+            return jsonify({'message': 'Cameras already running'}), 200
     except Exception as e:
-        return jsonify({'message': f'启动失败: {str(e)}'}), 500
+        print(f"启动摄像头失败: {str(e)}")
+        return jsonify({'message': f'启动摄像头失败: {str(e)}'}), 500
 
 
 # 停止 手势特征点 识别摄像头占用
 @app.route('/g_recognition/stop_cameras', methods=['POST'])
-def g_stop():
-    global g_recognition
+def g_recognition_stop():
+    """停止手势识别摄像头"""
     try:
+        global g_recognition
         if g_recognition is not None:
             g_recognition.shutdown()
             g_recognition = None
             return jsonify({'message': 'Cameras stopped'}), 200
-        return jsonify({'message': 'Cameras already stopped'}), 200
+        else:
+            return jsonify({'message': 'Cameras already stopped'}), 200
     except Exception as e:
-        return jsonify({'message': f'停止失败: {str(e)}'}), 500
+        print(f"停止摄像头失败: {str(e)}")
+        return jsonify({'message': f'停止摄像头失败: {str(e)}'}), 500
 
 
 # 接收get请求返回流式视频流
 @app.route('/g_recognition/video_feed')
-def g_feed():
-    global g_recognition
-    if g_recognition is not None:
-        return Response(g_recognition.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
-    else:
-        abort(404, description="视频流未初始化")
+def g_recognition_feed():
+    """获取手势识别视频流"""
+    try:
+        global g_recognition
+        if g_recognition is not None:
+            return Response(g_recognition.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
+        else:
+            abort(404, description="视频流未初始化")
+    except Exception as e:
+        print(f"获取视频流失败: {str(e)}")
+        return jsonify({'message': f'获取视频流失败: {str(e)}'}), 500
 
 
 # 启动手势类别判断摄像头占用

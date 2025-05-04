@@ -16,7 +16,6 @@ class GesturePointRecognition(VideoShow):
                  model_complexity=1, min_detection_confidence=0.5,
                  min_tracking_confidence=0.5, output_size=(720, 720)):
         """
-
         :param static_image_mode:
         :param max_num_hands:
         :param model_complexity:
@@ -104,6 +103,7 @@ class GesturePointRecognition(VideoShow):
         cv2.destroyAllWindows()
 
     def shutdown(self):
+        
         self.device.close()
 
 
