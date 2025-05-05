@@ -212,18 +212,23 @@ def d_feed():
 @app.route('/f_detector/start_cameras', methods=['POST'])
 def f_d_start():
     global f_detector
+    print("f_d_start")
     try:
         if f_detector is None:
-            f_detector = FeaturePointDetector()
-            f_detector.run()
-        return jsonify({'message': 'Cameras started'}), 200
+            f_detector = FeaturePointDetector(headless=True)
+            f_detector.start()  # 使用start方法而不是run方法，确保在单独线程中执行
+            return jsonify({'message': 'Cameras started'}), 200
+        else:
+            return jsonify({'message': 'Cameras already running'}), 200
     except Exception as e:
+        print(f"启动失败: {str(e)}")
         return jsonify({'message': f'启动失败: {str(e)}'}), 500
 
 # 停止特征点识别摄像头占用
 @app.route('/f_detector/stop_cameras', methods=['POST'])
 def f_d_stop():
     global f_detector
+    print("f_d_stop")
     try:
         if f_detector is not None:
             f_detector.shutdown()
@@ -234,64 +239,144 @@ def f_d_stop():
         return jsonify({'message': f'停止失败: {str(e)}'}), 500
 
 # 接收get请求返回流式视频流 左
-@app.route('/f_detector/video_feed1')
+@app.route('/f_detector/video_feed_left')
 def f_d_feed_left():
     global f_detector
-    if f_detector is not None:
-        return Response(f_detector.show_left(), mimetype='multipart/x-mixed-replace; boundary=frame')
-    else:
-        abort(404, description="视频流未初始化")
+    print("请求左侧视频流")
+    try:
+        if f_detector is not None:
+            # 添加缓存控制和必要的响应头
+            response = Response(
+                f_detector.show_left(),
+                mimetype='multipart/x-mixed-replace; boundary=frame'
+            )
+            # 添加缓存控制头，防止浏览器缓存
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            response.headers['Connection'] = 'close'
+            return response
+        else:
+            print("视频流未初始化")
+            abort(404, description="视频流未初始化")
+    except Exception as e:
+        print(f"获取左侧视频流失败: {str(e)}")
+        return jsonify({'message': f'获取视频流失败: {str(e)}'}), 500
     
-# 接收get请求返回流式视频流 左
-@app.route('/f_detector/video_feed2')
+# 接收get请求返回流式视频流 右
+@app.route('/f_detector/video_feed_right')
 def f_d_feed_right():
     global f_detector
-    if f_detector is not None:
-        return Response(f_detector.show_right(), mimetype='multipart/x-mixed-replace; boundary=frame')
-    else:
-        abort(404, description="视频流未初始化")
+    print("请求右侧视频流")
+    try:
+        if f_detector is not None:
+            # 添加缓存控制和必要的响应头
+            response = Response(
+                f_detector.show_right(),
+                mimetype='multipart/x-mixed-replace; boundary=frame'
+            )
+            # 添加缓存控制头，防止浏览器缓存
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            response.headers['Connection'] = 'close'
+            return response
+        else:
+            print("视频流未初始化")
+            abort(404, description="视频流未初始化")
+    except Exception as e:
+        print(f"获取右侧视频流失败: {str(e)}")
+        return jsonify({'message': f'获取视频流失败: {str(e)}'}), 500
 
 
-# # f_tracker
-# @app.route('f_tracker/start_camera', methods=['POST'])
-# def f_t_start():
-#     global f_tracker
-#     if f_tracker is None:
-#         # 启动摄像头 处理视频流
-#         f_tracker = FeaturePointTracker()
-#         f_tracker.run()
-#         return jsonify({'message':'Camera started'}), 200
+# f_tracker
+@app.route('/f_tracker/start_cameras', methods=['POST'])
+def f_t_start():
+    global f_tracker
+    print("f_t_start")
+    try:
+        if f_tracker is None:
+            # 启动摄像头 处理视频流，使用无头模式
+            f_tracker = FeaturePointTracker(camera_size=720, motion_estimation="hardware_accelerated", headless=True)
+            f_tracker.start()  # 使用start方法启动线程
+            return jsonify({'message':'摄像头已启动'}), 200
+        else:
+            return jsonify({'message':'摄像头已经在运行中'}), 200
+    except Exception as e:
+        print(f"启动失败: {str(e)}")
+        return jsonify({'message': f'启动失败: {str(e)}'}), 500
     
-# # f_tracker stop using this
-# @app.route('f_tracker/stop_camera', methods=['POST'])
-# def f_t_stop():
-#     global f_tracker
-#     if f_tracker is not None:
-#         # 调用shutdown函数 中断摄像头控制
-#         f_tracker.shut_down()
-        
-#         return jsonify({'message': "Camera stoped"}), 200
+# f_tracker stop
+@app.route('/f_tracker/stop_cameras', methods=['POST'])
+def f_t_stop():
+    global f_tracker
+    print("f_t_stop")
+    try:
+        if f_tracker is not None:
+            # 调用close方法停止线程
+            f_tracker.close()
+            f_tracker = None
+            return jsonify({'message': "摄像头已停止"}), 200
+        else:
+            return jsonify({'message': "摄像头已经是停止状态"}), 200
+    except Exception as e:
+        print(f"停止失败: {str(e)}")
+        return jsonify({'message': f'停止失败: {str(e)}'}), 500
     
-# @app.route('f_tracker/video_feed1')
-# def f_t_feed_left():
-#     # 返回视频流
-#     global f_tracker
-#     if f_tracker is not None:
-#         return Response(f_tracker.show_left(), mimetype='multipart/x-mixed-replace; boundary=frame')
+@app.route('/f_tracker/video_feed_left')
+def f_t_feed_left():
+    # 返回左侧视频流
+    try:
+        global f_tracker
+        if f_tracker is not None:
+            # 添加缓存控制和必要的响应头
+            response = Response(
+                f_tracker.show_left(),
+                mimetype='multipart/x-mixed-replace; boundary=frame'
+            )
+            # 添加缓存控制头，防止浏览器缓存
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            response.headers['Connection'] = 'close'
+            return response
+        else:
+            print("视频流未初始化")
+            abort(404, description="视频流未初始化")
+    except Exception as e:
+        print(f"获取左侧视频流失败: {str(e)}")
+        abort(500, description=f"获取视频流失败: {str(e)}")
 
-# @app.route('f_tracker/video_feed2')
-# def f_t_feed_right():
-#     # 返回视频流
-#     global f_tracker
-#     if f_tracker is not None:
-#         return Response(f_tracker.show_right(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
+@app.route('/f_tracker/video_feed_right')
+def f_t_feed_right():
+    # 返回右侧视频流
+    try:
+        global f_tracker
+        if f_tracker is not None:
+            # 添加缓存控制和必要的响应头
+            response = Response(
+                f_tracker.show_right(),
+                mimetype='multipart/x-mixed-replace; boundary=frame'
+            )
+            # 添加缓存控制头，防止浏览器缓存
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            response.headers['Connection'] = 'close'
+            return response
+        else:
+            print("视频流未初始化")
+            abort(404, description="视频流未初始化")
+    except Exception as e:
+        print(f"获取右侧视频流失败: {str(e)}")
+        abort(500, description=f"获取视频流失败: {str(e)}")
 
 
 # 启动 手势特征点 识别摄像头占用
 @app.route('/g_recognition/start_cameras', methods=['POST'])
 def g_recognition_start():
     """启动手势识别摄像头"""
+    print("g_recognition_start")
     try:
         global g_recognition
         if g_recognition is None:
@@ -309,6 +394,7 @@ def g_recognition_start():
 @app.route('/g_recognition/stop_cameras', methods=['POST'])
 def g_recognition_stop():
     """停止手势识别摄像头"""
+    print("g_recognition_stop")
     try:
         global g_recognition
         if g_recognition is not None:
@@ -510,6 +596,7 @@ def health_check():
         'cameras': {
             'd_estimator': d_estimator is not None,
             'f_detector': f_detector is not None,
+            'f_tracker': f_tracker is not None,
             'g_recognition': g_recognition is not None,
             'g_recognizer': g_recognizer is not None,
             'm_detector': m_detector is not None,
@@ -529,14 +616,17 @@ def server_error(error):
 
 # 确保所有摄像头在程序退出时正确关闭
 def cleanup():
-    global d_estimator, f_detector, g_recognition, g_recognizer, m_detector, p_video, s_RGB
+    global d_estimator, f_detector, f_tracker, g_recognition, g_recognizer, m_detector, p_video, s_RGB
     
-    for camera in [d_estimator, f_detector, g_recognition, g_recognizer, m_detector, p_video, s_RGB]:
+    for camera in [d_estimator, f_detector, f_tracker, g_recognition, g_recognizer, m_detector, p_video, s_RGB]:
         if camera is not None:
             try:
                 camera.shutdown()
             except:
-                pass
+                try:
+                    camera.close()  # 尝试使用close方法
+                except:
+                    pass
 
 atexit.register(cleanup)
 
