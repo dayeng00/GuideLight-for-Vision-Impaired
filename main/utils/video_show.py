@@ -29,7 +29,12 @@ class VideoShow(Thread):
         if self.is_show_fps:
             # 计算FPS
             self.current_time = time.time()
-            fps = 1 / (self.current_time - self.previous_time)
+            # 防止除以零错误
+            time_diff = self.current_time - self.previous_time
+            if time_diff > 0:
+                fps = 1 / time_diff
+            else:
+                fps = self.fps or 30  # 使用上一帧FPS或默认值30
             self.previous_time = self.current_time
 
             # 获取帧的高度和宽度

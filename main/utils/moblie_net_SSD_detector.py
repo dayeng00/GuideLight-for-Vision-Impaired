@@ -67,35 +67,67 @@ class OakDMobileNetSSD(VideoShowOAK):
             q_nn = self.device.getOutputQueue("nn")
 
             while True:
-                in_rgb = q_rgb.tryGet()
-                in_nn = q_nn.tryGet()
+                try:
+                    in_rgb = q_rgb.tryGet()
+                    in_nn = q_nn.tryGet()
 
-                if in_rgb is not None:
-                    self.frame = in_rgb.getCvFrame()
+                    if in_rgb is not None:
+                        self.frame = in_rgb.getCvFrame()
 
-                if in_nn is not None:
-                    self.detections = in_nn.detections
+                    if in_nn is not None:
+                        self.detections = in_nn.detections
 
-                if self.frame is not None:
-                    for detection in self.detections:
-                        bbox = self._frame_norm(self.frame,
-                                                (detection.xmin, detection.ymin, detection.xmax, detection.ymax))
-                        cv2.rectangle(self.frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 0, 0), 2)
+                    if self.frame is not None:
+                        # 创建一个帧的副本，避免修改原始帧可能导致的问题
+                        frame_to_show = self.frame.copy()
+                        
+                        # 绘制检测结果
+                        for detection in self.detections:
+                            try:
+                                bbox = self._frame_norm(frame_to_show,
+                                                        (detection.xmin, detection.ymin, detection.xmax, detection.ymax))
+                                cv2.rectangle(frame_to_show, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 0, 0), 2)
+                            except Exception as e:
+                                print(f"绘制检测框时出错: {e}")
+                                continue
 
-                    self.frame = cv2.resize(self.frame, self.output_size)
-                    self.frame = self.show_fps(self.frame)
-                    _, buffer = cv2.imencode('.jpg', self.frame)
-                    frame_bytes = buffer.tobytes()
+                        try:
+                            # 调整大小和显示FPS
+                            frame_to_show = cv2.resize(frame_to_show, self.output_size)
+                            frame_to_show = self.show_fps(frame_to_show)
+                            
+                            # 编码为JPEG
+                            _, buffer = cv2.imencode('.jpg', frame_to_show)
+                            frame_bytes = buffer.tobytes()
 
-                    # 以 MJPEG 格式返回
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                            # 以 MJPEG 格式返回
+                            yield (b'--frame\r\n'
+                                  b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                        except Exception as e:
+                            print(f"处理视频帧时出错: {e}")
+                            # 短暂休眠以避免在错误情况下过度占用CPU
+                            time.sleep(0.1)
+                            continue
 
-                # cv2.waitKey(1)
-                if not self.continue_running:
-                    break
+                    # 添加短暂休眠以避免过度占用CPU
+                    time.sleep(0.01)
+                    
+                    if not self.continue_running:
+                        break
+                except Exception as e:
+                    print(f"MobileNetSSD运行时出错: {e}")
+                    time.sleep(0.1)  # 错误发生时等待一段时间
+
+            print("MobileNetSSD检测线程已停止")
+    
     def shutdown(self):
-        self.device.close()
+        """安全关闭设备"""
+        try:
+            if self.device is not None:
+                self.device.close()
+                print("MobileNetSSD设备已安全关闭")
+        except Exception as e:
+            print(f"关闭MobileNetSSD设备时出错: {e}")
 
 # 一个视频流
 if __name__ == "__main__":

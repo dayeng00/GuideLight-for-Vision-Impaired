@@ -37,10 +37,16 @@ class FeaturePointDetector(VideoShowOAK):
 
         super().__init__(is_show_fps=is_show_fps, camera_size=camera_size)
 
+        # 确保camera_size不为零，防止后续除零错误
+        if self.camera_size <= 0:
+            self.camera_size = 720
+            print(f"警告: camera_size不能为零，已设置为默认值 {self.camera_size}")
+
         self.inputFeatureTrackerConfigQueue = None
         self.headless = headless  # 添加headless标志
         
         #  2025/3/27 NEW： 左右视频流
+        # 初始化帧变量，避免引用前未定义错误
         self.leftFrame = None
         self.rightFrame = None
         
@@ -144,43 +150,52 @@ class FeaturePointDetector(VideoShowOAK):
                     self.camera_size = 720  # 设置默认值
                     print(f"警告: 相机尺寸无效，已设置为默认值 {self.camera_size}")
                 
+                # 初始化帧变量，避免处理前未定义
+                leftFrame = None
+                rightFrame = None
+                
                 while self.continue_running:
                     try:
                         # 获取左侧相机的传递帧
                         inPassthroughFrameLeft = passthroughImageLeftQueue.get()
                         passthroughFrameLeft = inPassthroughFrameLeft.getFrame()
-                        self.leftFrame = cv2.cvtColor(passthroughFrameLeft, cv2.COLOR_GRAY2BGR)  # 转换为BGR图像，以便显示
+                        leftFrame = cv2.cvtColor(passthroughFrameLeft, cv2.COLOR_GRAY2BGR)  # 转换为BGR图像，以便显示
                         
                         # 获取右侧相机的传递帧
                         inPassthroughFrameRight = passthroughImageRightQueue.get()
                         passthroughFrameRight = inPassthroughFrameRight.getFrame()
-                        self.rightFrame = cv2.cvtColor(passthroughFrameRight, cv2.COLOR_GRAY2BGR)  # 转换为BGR图像，以便显示
+                        rightFrame = cv2.cvtColor(passthroughFrameRight, cv2.COLOR_GRAY2BGR)  # 转换为BGR图像，以便显示
                         
                         # 获取左侧跟踪到的特征点
                         trackedFeaturesLeft = outputFeaturesLeftQueue.get().trackedFeatures
                         # 在左侧图像中绘制特征点
-                        self.draw_features(self.leftFrame, trackedFeaturesLeft)
+                        if leftFrame is not None:
+                            self.draw_features(leftFrame, trackedFeaturesLeft)
 
                         # 获取右侧跟踪到的特征点
                         trackedFeaturesRight = outputFeaturesRightQueue.get().trackedFeatures
                         # 在右侧图像中绘制特征点
-                        self.draw_features(self.rightFrame, trackedFeaturesRight)
+                        if rightFrame is not None:
+                            self.draw_features(rightFrame, trackedFeaturesRight)
 
                         # 显示FPS
                         try:
-                            leftFrame = self.show_fps(self.leftFrame)
-                            rightFrame = self.show_fps(self.rightFrame)
+                            if leftFrame is not None:
+                                leftFrame = self.show_fps(leftFrame)
+                            if rightFrame is not None:
+                                rightFrame = self.show_fps(rightFrame)
                             
                             # 安全地调整图像大小，避免除零错误
-                            if self.camera_size > 0 and leftFrame is not None and rightFrame is not None:
-                                # 计算图像比例，确保数值有效
-                                ratio = max(0.1, 1280 / 720)  # 使用固定比例以避免除零
-                                new_width = int(self.camera_size * ratio)
-                                new_height = int(self.camera_size)
+                            # 使用固定比例，避免依赖camera_size除法
+                            if leftFrame is not None and rightFrame is not None:
+                                # 使用固定比例和固定大小
+                                new_width = 1280  # 固定宽度
+                                new_height = 720  # 固定高度
                                 
                                 left_frame = cv2.resize(leftFrame, (new_width, new_height))
                                 right_frame = cv2.resize(rightFrame, (new_width, new_height))
                                 
+                                # 更新类变量，供视频流使用
                                 self.leftFrame = left_frame
                                 self.rightFrame = right_frame
                         except Exception as resize_error:

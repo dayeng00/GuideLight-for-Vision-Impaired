@@ -1,0 +1,8 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.json",
+  "include": ["src/**/*", "src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "noImplicitAny": false
+  }
+}

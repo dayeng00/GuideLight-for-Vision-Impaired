@@ -58,38 +58,82 @@ class DisparityEstimator(VideoShowOAK):
             q = self.device.getOutputQueue(name="disparity", maxSize=4, blocking=False)
 
             while True:
-                inDisparity = q.get()  # 从队列中获取视差图数据
-                frame = inDisparity.getFrame()  # 获取视差图的帧数据
-                frame = (frame * (255 / self.depth.initialConfig.getMaxDisparity())).astype(np.uint8)
+                try:
+                    inDisparity = q.get()  # 从队列中获取视差图数据
+                    if inDisparity is None:
+                        time.sleep(0.01)
+                        continue
+                        
+                    frame = inDisparity.getFrame()  # 获取视差图的帧数据
+                    if frame is None or frame.size == 0:
+                        print("收到空视差帧，跳过处理")
+                        time.sleep(0.01)
+                        continue
+                    
+                    # 安全地处理视差图，避免除零
+                    max_disparity = self.depth.initialConfig.getMaxDisparity()
+                    if max_disparity > 0:
+                        frame = (frame * (255 / max_disparity)).astype(np.uint8)
+                    else:
+                        # 如果最大视差为零，使用默认值
+                        frame = frame.astype(np.uint8)
+                        print("警告：最大视差为零，使用原始视差图")
 
-                # cv2.imshow("disparity", frame)  # 显示原始的视差图
+                    try:
+                        # 使用颜色映射增强视差图的可视化效果
+                        frame = cv2.applyColorMap(frame, cv2.COLORMAP_JET)
 
-                # 使用颜色映射增强视差图的可视化效果
-                frame = cv2.applyColorMap(frame, cv2.COLORMAP_JET)
+                        # 显示帧率
+                        frame = self.show_fps(frame)
 
-                # 显示帧率
-                frame = self.show_fps(frame)
+                        # 安全调整图像大小
+                        # 避免使用相对尺寸计算，防止除零错误
+                        if self.camera_size > 0:
+                            new_width = int(self.camera_size * 1280 / 720)
+                            new_height = int(self.camera_size)
+                        else:
+                            # 如果camera_size无效，使用默认值
+                            new_width = 1280
+                            new_height = 720
+                            
+                        frame = cv2.resize(frame, (new_width, new_height))
 
-                # 调整图像大小
-                frame = cv2.resize(frame, (int(self.camera_size * 1280 / 720), int(self.camera_size)))
+                        if __name__ == "__main__":
+                            cv2.imshow("color_disparity", frame)
+                            cv2.waitKey(1)
+                        else:
+                            # 编码为JPEG
+                            _, buffer = cv2.imencode('.jpg', frame)
+                            frame_bytes = buffer.tobytes()
 
-                if __name__ == "__main__":
-                    cv2.imshow("color_disparity", frame)
-                    cv2.waitKey(1)
-                """
-                else:
-                    _, buffer = cv2.imencode('.jpg', frame)
-                    frame_bytes = buffer.tobytes()
-
-                    # 以 MJPEG 格式返回
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')  # 显示带有颜色映射的视差图
-                """
+                            # 以 MJPEG 格式返回
+                            yield (b'--frame\r\n'
+                                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')  # 显示带有颜色映射的视差图
+                    except Exception as e:
+                        print(f"处理视差图时出错: {str(e)}")
+                        time.sleep(0.1)
+                        continue
+                    
+                except Exception as e:
+                    print(f"视差估计器运行时出错: {str(e)}")
+                    time.sleep(0.1)
+                    
+                # 添加短暂休眠以避免过度占用CPU
+                time.sleep(0.01)
+                
                 if not self.continue_running:
                     break
+            
+            print("视差估计器线程已停止")
 
     def shutdown(self):
-        self.device.close()
+        """安全关闭设备"""
+        try:
+            if self.device is not None:
+                self.device.close()
+                print("视差估计器设备已安全关闭")
+        except Exception as e:
+            print(f"关闭视差估计器设备时出错: {str(e)}")
 
 
 # 一个视频流

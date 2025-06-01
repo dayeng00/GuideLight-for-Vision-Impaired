@@ -1,0 +1,27 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+    "composite": true,
+    //添加---
+    "ignoreDeprecations":"5.0",		//高版本上句报错，此句解决。如此句报错可注释掉
+     "baseUrl": ".",			
+     "paths": {					
+      "@/*":[					
+        "src/*"					
+      ]							
+     }	
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
+  "references": [{ "path": "./tsconfig.node.json" }],
+  
+  //添加
+  "exclude":["node_modules"]		// // ts排除的文件
+}
