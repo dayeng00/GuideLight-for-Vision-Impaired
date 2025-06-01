@@ -52,7 +52,8 @@ class GestureRecognizer:
     def _setup_mediapipe(self):
         try:
             # 检查模型文件是否存在
-            model_path = 'main/resources/gesture_recognizer/gesture_recognizer.task'
+            # TODO: 更换绝对路径
+            model_path = 'E:/Python/PythonFile/guidelight/GuideLight-for-Vision-Impaired/main/resources/gesture_recognizer/gesture_recognizer.task'
             if not os.path.exists(model_path):
                 print(f"警告: 模型文件不存在: {model_path}")
                 # 尝试查找替代路径
