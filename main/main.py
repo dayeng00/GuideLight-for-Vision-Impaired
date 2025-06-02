@@ -1183,7 +1183,6 @@ def not_found(error):
 @app.errorhandler(500)
 def server_error(error):
     return jsonify({'error': 'Internal server error', 'message': str(error)}), 500
-
 # 确保所有摄像头在程序退出时正确关闭
 def cleanup():
     global d_estimator, f_detector, f_tracker, g_recognition, g_recognizer, m_detector, p_video, s_RGB
