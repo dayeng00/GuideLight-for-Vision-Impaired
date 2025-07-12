@@ -1,0 +1,77 @@
+Date : 2025-07-11 20:45:52
+Directory : e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front
+Total : 33 files,  8157 codes, 208 comments, 1112 blanks, all 9477 lines
+
+Languages
++--------------------+------------+------------+------------+------------+------------+
+| language           | files      | code       | comment    | blank      | total      |
++--------------------+------------+------------+------------+------------+------------+
+| vue                |         12 |      5,557 |         44 |        861 |      6,462 |
+| JSON               |          4 |      1,450 |          3 |          7 |      1,460 |
+| TypeScript         |          9 |        785 |        152 |        167 |      1,104 |
+| Markdown           |          2 |        183 |          0 |         46 |        229 |
+| CSS                |          2 |        153 |          8 |         29 |        190 |
+| HTML               |          1 |         19 |          1 |          1 |         21 |
+| JSON with Comments |          1 |          8 |          0 |          1 |          9 |
+| XML                |          2 |          2 |          0 |          0 |          2 |
++--------------------+------------+------------+------------+------------+------------+
+
+Directories
++---------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                                      | files      | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                                         |         33 |      8,157 |        208 |      1,112 |      9,477 |
+| . (Files)                                                                                                                 |          9 |      1,718 |          9 |         57 |      1,784 |
+| public                                                                                                                    |          1 |          1 |          0 |          0 |          1 |
+| src                                                                                                                       |         23 |      6,438 |        199 |      1,055 |      7,692 |
+| src (Files)                                                                                                               |          4 |        247 |          9 |         37 |        293 |
+| src\api                                                                                                                   |          1 |        196 |         23 |         51 |        270 |
+| src\assets                                                                                                                |          1 |          1 |          0 |          0 |          1 |
+| src\components                                                                                                            |          2 |        317 |          0 |         72 |        389 |
+| src\config                                                                                                                |          1 |         14 |          5 |          3 |         22 |
+| src\router                                                                                                                |          1 |        110 |          7 |          7 |        124 |
+| src\styles                                                                                                                |          1 |         83 |          8 |         19 |        110 |
+| src\types                                                                                                                 |          2 |         35 |          3 |          5 |         43 |
+| src\utils                                                                                                                 |          1 |        355 |        104 |         93 |        552 |
+| src\views                                                                                                                 |          9 |      5,080 |         40 |        768 |      5,888 |
++---------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++---------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| filename                                                                                                                  | language           | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\README.md                          | Markdown           |          3 |          0 |          3 |          6 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\README_INTEGRATED_MONITORING.md    | Markdown           |        180 |          0 |         43 |        223 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\index.html                         | HTML               |         19 |          1 |          1 |         21 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\package-lock.json                  | JSON               |      1,394 |          0 |          1 |      1,395 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\package.json                       | JSON               |         24 |          0 |          1 |         25 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\public\vite.svg                    | XML                |          1 |          0 |          0 |          1 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\App.vue                        | vue                |        160 |          4 |         21 |        185 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\api\index.ts                   | TypeScript         |        196 |         23 |         51 |        270 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\assets\vue.svg                 | XML                |          1 |          0 |          0 |          1 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\components\BEVCanvas.vue       | vue                |        282 |          0 |         65 |        347 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\components\HelloWorld.vue      | vue                |         35 |          0 |          7 |         42 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\config\index.ts                | TypeScript         |         14 |          5 |          3 |         22 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\main.ts                        | TypeScript         |         17 |          4 |          5 |         26 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\router\index.ts                | TypeScript         |        110 |          7 |          7 |        124 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\style.css                      | CSS                |         70 |          0 |         10 |         80 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\styles\index.css               | CSS                |         83 |          8 |         19 |        110 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\types\shims-vue.d.ts           | TypeScript         |         25 |          1 |          3 |         29 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\types\vite-env.d.ts            | TypeScript         |         10 |          2 |          2 |         14 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\utils\audioProcessor.ts        | TypeScript         |        355 |        104 |         93 |        552 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\views\Dashboard.vue            | vue                |        228 |          1 |         34 |        263 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\views\IntegratedMonitoring.vue | vue                |      2,472 |         19 |        367 |      2,858 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\views\Introduction.vue         | vue                |        425 |          6 |         62 |        493 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\views\Location.vue             | vue                |        706 |          9 |        100 |        815 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\views\Login.vue                | vue                |        277 |          2 |         33 |        312 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\views\NotFound.vue             | vue                |         45 |          0 |          8 |         53 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\views\SystemSettings.vue       | vue                |         73 |          0 |         12 |         85 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\views\VideoMonitor.vue         | vue                |        375 |          2 |         54 |        431 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\views\VoiceNavigation.vue      | vue                |        479 |          1 |         98 |        578 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\src\vite-env.d.ts                  | TypeScript         |          0 |          1 |          1 |          2 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\tsconfig.app.json                  | JSON               |         12 |          1 |          2 |         15 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\tsconfig.json                      | JSON with Comments |          8 |          0 |          1 |          9 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\tsconfig.node.json                 | JSON               |         20 |          2 |          3 |         25 |
+| e:\Python\PythonFile\guidelight\GuideLight-for-Vision-Impaired\static\guidelight_front\vite.config.ts                     | TypeScript         |         58 |          5 |          2 |         65 |
+| Total                                                                                                                     |                    |      8,157 |        208 |      1,112 |      9,477 |
++---------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+

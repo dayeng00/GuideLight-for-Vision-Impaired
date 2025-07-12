@@ -15,10 +15,19 @@ import time
 import datetime
 import json
 import atexit
-from flask import Flask, request, jsonify, Response, send_from_directory, abort
+import cv2
+import numpy as np
+import logging
+from typing import Callable
+from flask import Flask, request, jsonify, Response, send_from_directory, abort, render_template, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
+
+# 设置logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 # 引入各类视频流
 try:
     from utils.disparity_estimator import DisparityEstimator
@@ -29,6 +38,7 @@ try:
     from utils.spatial_object_tracker_on_RGB import SpatialObjectTracker
     from utils.feature_point_detector import FeaturePointDetector
     from utils.feature_point_tracker import FeaturePointTracker
+    from utils.enhanced_detector import EnhancedDetector
     
     # 检查各个类是否成功导入
     modules_available = {
@@ -63,6 +73,74 @@ except Exception as e:
         'FeaturePointTracker': False
     }
 
+# 导入轨迹追踪和碰撞预警管理器
+try:
+    from utils.trajectory_collision_manager import trajectory_collision_manager
+    print("轨迹追踪和碰撞预警管理器导入成功")
+except Exception as e:
+    print(f"导入轨迹追踪和碰撞预警管理器失败: {e}")
+    trajectory_collision_manager = None
+
+# 导入设备管理器
+from utils.device_manager import device_manager
+
+# 创建通用的线程化视频流函数
+def create_threaded_video_stream(stream_id: str, source_func: Callable, response_headers: dict = None):
+    """创建线程化的视频流响应"""
+    def generate():
+        client_id = None
+        try:
+            # 获取或创建视频流
+            stream = thread_manager.get_stream(stream_id)
+            if stream is None:
+                stream = thread_manager.create_stream(stream_id, source_func, max_buffer_size=5)
+            
+            # 添加客户端连接
+            client_id = stream.add_client()
+            
+            while True:
+                # 非阻塞获取帧
+                frame_data = stream.get_frame(timeout=0.1)
+                
+                if frame_data is not None:
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+                else:
+                    # 没有帧时短暂休眠
+                    time.sleep(0.033)  # ~30fps
+                    
+        except GeneratorExit:
+            # 客户端断开连接
+            pass
+        except Exception as e:
+            logger.error(f"视频流 {stream_id} 生成错误: {e}")
+        finally:
+            # 清理客户端连接
+            if client_id and stream:
+                stream.remove_client(client_id)
+    
+    # 设置响应头
+    headers = {
+        'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'Connection': 'keep-alive'
+    }
+    
+    if response_headers:
+        headers.update(response_headers)
+    
+    return Response(generate(), headers=headers)
+
+# 导入线程管理器
+try:
+    from utils.thread_manager import thread_manager
+    print("线程管理器导入成功")
+except Exception as e:
+    print(f"导入线程管理器失败: {e}")
+    thread_manager = None
+
 # 添加防重复请求机制
 request_timestamps = {
     'd_estimator': {'start': 0, 'stop': 0},
@@ -84,9 +162,12 @@ g_recognizer = None
 m_detector = None
 p_video = None
 s_RGB = None
+enhanced_detector = None  # 增强检测器
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
+# 通用视频流处理函数（移除旧版本，使用新的线程管理器）
 
 # 添加响应头，禁用缓存
 @app.after_request
@@ -97,6 +178,9 @@ def add_header(response):
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
     return response
 
 # 检查请求频率，防止重复请求
@@ -122,14 +206,16 @@ def check_request_rate(module, action):
 try:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:wangzishu@localhost:3306/Guidelight_UserData'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # 禁用对象修改追踪（可选）
-    db = SQLAlchemy(app)
+    if 'db' not in globals():
+        db = SQLAlchemy(app)
     db_available = True
 except Exception as e:
     print(f"数据库连接错误: {e}")
     print("使用SQLite作为备用数据库")
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///userdata.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    db = SQLAlchemy(app)
+    if 'db' not in globals():
+        db = SQLAlchemy(app)
     db_available = False
 
 
@@ -304,7 +390,7 @@ def get_current_location():
             default_location = LocationData(
                 longitude=117.283042,
                 latitude=31.844786,
-                time=datetime.datetime.now()
+                time=datetime.now()
             )
             db.session.add(default_location)
             db.session.commit()
@@ -387,7 +473,7 @@ def add_location():
         new_location = LocationData(
             longitude=float(data['lng']),
             latitude=float(data['lat']),
-            time=datetime.datetime.now()
+            time=datetime.now()
         )
         
         # 保存到数据库
@@ -424,7 +510,7 @@ def set_current_location():
         new_location = LocationData(
             longitude=float(data['lng']),
             latitude=float(data['lat']),
-            time=datetime.datetime.now()
+            time=datetime.now()
         )
         
         # 保存到数据库
@@ -582,11 +668,21 @@ def d_stop():
 # 接收get请求返回流式视频流
 @app.route('/d_estimator/video_feed')
 def d_feed():
-    global d_estimator
-    if d_estimator is not None:
-        return Response(d_estimator.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
-    else:
-        abort(404, description="视频流未初始化")
+    """使用多线程管理器获取深度估计器视频流"""
+    print("请求深度估计器视频流")
+    
+    if not thread_manager:
+        return jsonify({"error": "线程管理器未初始化"}), 500
+    
+    if d_estimator is None:
+        return jsonify({"error": "深度估计器未初始化"}), 503
+    
+    try:
+        stream_id = f"d_estimator_{id(d_estimator)}"
+        return create_threaded_video_stream(stream_id, d_estimator.run)
+    except Exception as e:
+        logger.error(f"深度估计器视频流启动失败: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # 启动特征点识别摄像头占用
@@ -641,52 +737,40 @@ def f_d_stop():
 # 接收get请求返回流式视频流 左
 @app.route('/f_detector/video_feed_left')
 def f_d_feed_left():
-    global f_detector
+    """使用多线程管理器获取左侧视频流"""
     print("请求左侧视频流")
+    
+    if not thread_manager:
+        return jsonify({"error": "线程管理器未初始化"}), 500
+    
+    if f_detector is None:
+        return jsonify({"error": "特征点检测器未初始化"}), 503
+    
     try:
-        if f_detector is not None:
-            # 添加缓存控制和必要的响应头
-            response = Response(
-                f_detector.show_left(),
-                mimetype='multipart/x-mixed-replace; boundary=frame'
-            )
-            # 添加缓存控制头，防止浏览器缓存
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
-            response.headers['Connection'] = 'close'
-            return response
-        else:
-            print("视频流未初始化")
-            abort(404, description="视频流未初始化")
+        stream_id = f"f_detector_left_{id(f_detector)}"
+        return create_threaded_video_stream(stream_id, f_detector.show_left)
     except Exception as e:
-        print(f"获取左侧视频流失败: {str(e)}")
-        return jsonify({'message': f'获取视频流失败: {str(e)}'}), 500
+        logger.error(f"左侧视频流启动失败: {e}")
+        return jsonify({"error": str(e)}), 500
     
 # 接收get请求返回流式视频流 右
 @app.route('/f_detector/video_feed_right')
 def f_d_feed_right():
-    global f_detector
+    """使用多线程管理器获取右侧视频流"""
     print("请求右侧视频流")
+    
+    if not thread_manager:
+        return jsonify({"error": "线程管理器未初始化"}), 500
+    
+    if f_detector is None:
+        return jsonify({"error": "特征点检测器未初始化"}), 503
+    
     try:
-        if f_detector is not None:
-            # 添加缓存控制和必要的响应头
-            response = Response(
-                f_detector.show_right(),
-                mimetype='multipart/x-mixed-replace; boundary=frame'
-            )
-            # 添加缓存控制头，防止浏览器缓存
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
-            response.headers['Connection'] = 'close'
-            return response
-        else:
-            print("视频流未初始化")
-            abort(404, description="视频流未初始化")
+        stream_id = f"f_detector_right_{id(f_detector)}"
+        return create_threaded_video_stream(stream_id, f_detector.show_right)
     except Exception as e:
-        print(f"获取右侧视频流失败: {str(e)}")
-        return jsonify({'message': f'获取视频流失败: {str(e)}'}), 500
+        logger.error(f"右侧视频流启动失败: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # f_tracker
@@ -737,51 +821,39 @@ def f_t_stop():
     
 @app.route('/f_tracker/video_feed_left')
 def f_t_feed_left():
-    # 返回左侧视频流
+    """使用多线程管理器获取f_tracker左侧视频流"""
+    print("请求f_tracker左侧视频流")
+    
+    if not thread_manager:
+        return jsonify({"error": "线程管理器未初始化"}), 500
+    
+    if f_tracker is None:
+        return jsonify({"error": "特征点追踪器未初始化"}), 503
+    
     try:
-        global f_tracker
-        if f_tracker is not None:
-            # 添加缓存控制和必要的响应头
-            response = Response(
-                f_tracker.show_left(),
-                mimetype='multipart/x-mixed-replace; boundary=frame'
-            )
-            # 添加缓存控制头，防止浏览器缓存
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
-            response.headers['Connection'] = 'close'
-            return response
-        else:
-            print("视频流未初始化")
-            abort(404, description="视频流未初始化")
+        stream_id = f"f_tracker_left_{id(f_tracker)}"
+        return create_threaded_video_stream(stream_id, f_tracker.show_left)
     except Exception as e:
-        print(f"获取左侧视频流失败: {str(e)}")
-        abort(500, description=f"获取视频流失败: {str(e)}")
+        logger.error(f"f_tracker左侧视频流启动失败: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/f_tracker/video_feed_right')
 def f_t_feed_right():
-    # 返回右侧视频流
+    """使用多线程管理器获取f_tracker右侧视频流"""
+    print("请求f_tracker右侧视频流")
+    
+    if not thread_manager:
+        return jsonify({"error": "线程管理器未初始化"}), 500
+    
+    if f_tracker is None:
+        return jsonify({"error": "特征点追踪器未初始化"}), 503
+    
     try:
-        global f_tracker
-        if f_tracker is not None:
-            # 添加缓存控制和必要的响应头
-            response = Response(
-                f_tracker.show_right(),
-                mimetype='multipart/x-mixed-replace; boundary=frame'
-            )
-            # 添加缓存控制头，防止浏览器缓存
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
-            response.headers['Connection'] = 'close'
-            return response
-        else:
-            print("视频流未初始化")
-            abort(404, description="视频流未初始化")
+        stream_id = f"f_tracker_right_{id(f_tracker)}"
+        return create_threaded_video_stream(stream_id, f_tracker.show_right)
     except Exception as e:
-        print(f"获取右侧视频流失败: {str(e)}")
-        abort(500, description=f"获取视频流失败: {str(e)}")
+        logger.error(f"f_tracker右侧视频流启动失败: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # 启动 手势特征点 识别摄像头占用
@@ -836,16 +908,21 @@ def g_recognition_stop():
 # 接收get请求返回流式视频流
 @app.route('/g_recognition/video_feed')
 def g_recognition_feed():
-    """获取手势识别视频流"""
+    """使用多线程管理器获取手势识别视频流"""
+    print("请求手势识别视频流")
+    
+    if not thread_manager:
+        return jsonify({"error": "线程管理器未初始化"}), 500
+    
+    if g_recognition is None:
+        return jsonify({"error": "手势识别器未初始化"}), 503
+    
     try:
-        global g_recognition
-        if g_recognition is not None:
-            return Response(g_recognition.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
-        else:
-            abort(404, description="视频流未初始化")
+        stream_id = f"g_recognition_{id(g_recognition)}"
+        return create_threaded_video_stream(stream_id, g_recognition.run)
     except Exception as e:
-        print(f"获取视频流失败: {str(e)}")
-        return jsonify({'message': f'获取视频流失败: {str(e)}'}), 500
+        logger.error(f"手势识别视频流启动失败: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # 启动手势类别判断摄像头占用
@@ -894,16 +971,21 @@ def r_stop():
 # 接收get请求返回流式视频流
 @app.route('/g_recognizer/video_feed')
 def r_feed():
+    """使用多线程管理器获取手势类别判断视频流"""
+    print("请求手势类别判断视频流")
+    
+    if not thread_manager:
+        return jsonify({"error": "线程管理器未初始化"}), 500
+    
+    if g_recognizer is None:
+        return jsonify({"error": "手势类别判断器未初始化"}), 503
+    
     try:
-        print("g_recognizer is not None")
-        global g_recognizer
-        if g_recognizer is not None:
-            return Response(g_recognizer.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
-        else:
-            abort(404, description="视频流未初始化")
+        stream_id = f"g_recognizer_{id(g_recognizer)}"
+        return create_threaded_video_stream(stream_id, g_recognizer.run)
     except Exception as e:
-        print(f"获取视频流失败: {str(e)}")
-        return jsonify({'message': f'获取视频流失败: {str(e)}'}), 500
+        logger.error(f"手势类别判断视频流启动失败: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # 启动MobileNetSSD 目标检测摄像头占用
@@ -1115,6 +1197,36 @@ def s_feed():
         abort(404, description="视频流未初始化")
 
 
+# 导入新的功能模块
+try:
+    from utils.yolo_processor import YOLOProcessor
+    from utils.audio_processor import AudioManager
+    from utils.speech_processor import SpeechProcessor
+    from utils.navigation_service import NavigationService
+    # 注意：trajectory_collision_manager已经在上面导入了，不要重复导入
+    
+    # 初始化处理器
+    yolo_processor = YOLOProcessor()
+    audio_manager = AudioManager()
+    speech_processor = SpeechProcessor()
+    navigation_service = NavigationService()
+    # trajectory_collision_manager已经在上面初始化了
+    
+    # 启动音频管理器
+    audio_manager.start()
+    
+    processors_available = True
+    print("所有处理器初始化成功")
+    
+except Exception as e:
+    print(f"处理器初始化失败: {e}")
+    processors_available = False
+    yolo_processor = None
+    audio_manager = None
+    speech_processor = None
+    navigation_service = None
+    # trajectory_collision_manager保持原有值，不设为None
+
 # 添加主页和API健康检查
 @app.route('/')
 def home():
@@ -1138,7 +1250,7 @@ def init_db():
             default_location = LocationData(
                 longitude=117.283042,  # 合肥工业大学经度
                 latitude=31.844786,    # 合肥工业大学纬度
-                time=datetime.datetime.now()
+                time=datetime.now()
             )
             db.session.add(default_location)
             db.session.commit()
@@ -1155,13 +1267,497 @@ def init_db():
 with app.app_context():
     init_db()
 
+# ========== 新增的智能处理API ==========
+
+@app.route('/api/yolo/process', methods=['POST'])
+def process_yolo():
+    """YOLO目标检测和碰撞预警处理"""
+    if not processors_available or not yolo_processor:
+        return jsonify({'error': 'YOLO处理器不可用'}), 500
+    
+    try:
+        # 这里应该从摄像头或上传的图像获取数据
+        # 暂时返回状态信息
+        status = yolo_processor.get_status()
+        return jsonify({
+            'success': True,
+            'status': status,
+            'collision_risk': yolo_processor.get_collision_risk_level()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/audio/3d', methods=['POST'])
+def process_3d_audio():
+    """3D音频处理"""
+    if not processors_available or not audio_manager:
+        return jsonify({'error': '3D音频处理器不可用'}), 500
+    
+    try:
+        data = request.get_json()
+        azimuth_pitch_data = data.get('azimuth_pitch_data', [])
+        audio_type = data.get('audio_type', 'beep')
+        
+        # 处理3D音频
+        audio_manager.add_audio_data(azimuth_pitch_data, audio_type)
+        
+        # 获取音频可视化数据
+        visualization = audio_manager.get_audio_visualization(azimuth_pitch_data, audio_type)
+        
+        return jsonify({
+            'success': True,
+            'visualization': visualization,
+            'status': audio_manager.get_status()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# 语音识别API
+@app.route('/api/speech/recognize', methods=['POST'])
+def recognize_speech():
+    """
+    语音识别API - 参考PYQT系统实现
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'audio_data' not in data:
+            print("语音识别请求缺少音频数据")
+            return jsonify({
+                'success': False,
+                'error': '缺少音频数据'
+            }), 400
+        
+        audio_data = data['audio_data']
+        sample_rate = data.get('sample_rate', 16000)
+        
+        # 检查音频数据
+        if not audio_data:
+            print("语音识别请求的音频数据为空")
+            return jsonify({
+                'success': False,
+                'error': '音频数据为空'
+            }), 400
+        
+        # 记录音频数据长度
+        audio_data_length = len(audio_data) if isinstance(audio_data, str) else 0
+        print(f"收到语音识别请求，音频数据长度: {audio_data_length} 字符")
+        
+        # 引入日志配置
+        import logging
+        logging.basicConfig(level=logging.DEBUG, 
+                           format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        
+        # 引入超时机制
+        import threading
+        from threading import Timer
+        
+        response_ready = threading.Event()
+        response_data = [None]
+        
+        def process_with_timeout():
+            try:
+                # 使用语音识别处理器
+                from utils.speech_processor import SpeechProcessor
+                
+                processor = SpeechProcessor()
+                print("创建SpeechProcessor实例成功")
+                
+                result = processor.recognize_from_base64(audio_data, sample_rate)
+                print(f"语音识别处理结果: {result}")
+                
+                if result and result.get('success', False):
+                    print(f"语音识别成功: {result.get('recognition_text', '')}")
+                    response_data[0] = {
+                        'success': True,
+                        'recognition_text': result.get('recognition_text', ''),
+                        'confidence': result.get('confidence', 0.0),
+                        'command': result.get('command', {}),
+                        'result': result.get('result', {}),
+                        'is_simulated': result.get('is_simulated', False)
+                    }
+                else:
+                    error_msg = result.get('error', '未知错误') if result else '语音识别失败'
+                    print(f"语音识别失败: {error_msg}")
+                    response_data[0] = {
+                        'success': False,
+                        'error': error_msg
+                    }
+            except Exception as processor_error:
+                print(f"语音处理器错误: {str(processor_error)}")
+                import traceback
+                traceback.print_exc()
+                
+                # 尝试使用模拟响应
+                try:
+                    from utils.speech_processor import SpeechProcessor
+                    processor = SpeechProcessor()
+                    text = processor._get_simulated_response()
+                    command = processor.recognizer.parse_command(text)
+                    handler = processor.command_handlers.get(command['type'], processor._handle_text)
+                    result = handler(command)
+                    
+                    response_data[0] = {
+                        'success': True,
+                        'recognition_text': text,
+                        'command': command,
+                        'result': result,
+                        'is_simulated': True,
+                        'note': '处理出错，使用模拟响应'
+                    }
+                except Exception as sim_err:
+                    response_data[0] = {
+                        'success': False,
+                        'error': f'语音处理器错误: {str(processor_error)}'
+                    }
+            finally:
+                # 标记处理完成
+                response_ready.set()
+        
+        # 创建并启动处理线程
+        processing_thread = threading.Thread(target=process_with_timeout)
+        processing_thread.daemon = True
+        processing_thread.start()
+        
+        # 等待处理完成，最多15秒
+        is_ready = response_ready.wait(timeout=15)
+        
+        if not is_ready:
+            print("语音识别请求处理超时(15秒)")
+            # 尝试使用模拟响应
+            try:
+                from utils.speech_processor import SpeechProcessor
+                processor = SpeechProcessor()
+                text = processor._get_simulated_response()
+                command = processor.recognizer.parse_command(text)
+                handler = processor.command_handlers.get(command['type'], processor._handle_text)
+                result = handler(command)
+                
+                return jsonify({
+                    'success': True,
+                    'recognition_text': text,
+                    'command': command,
+                    'result': result,
+                    'is_simulated': True,
+                    'note': 'API处理超时，使用模拟响应'
+                })
+            except Exception as sim_err:
+                return jsonify({
+                    'success': False,
+                    'error': '语音识别处理超时，请重试'
+                }), 408  # 408 Request Timeout
+        
+        if response_data[0] is None:
+            print("语音识别返回了空结果")
+            # 尝试使用模拟响应
+            try:
+                from utils.speech_processor import SpeechProcessor
+                processor = SpeechProcessor()
+                text = processor._get_simulated_response()
+                command = processor.recognizer.parse_command(text)
+                handler = processor.command_handlers.get(command['type'], processor._handle_text)
+                result = handler(command)
+                
+                return jsonify({
+                    'success': True,
+                    'recognition_text': text,
+                    'command': command,
+                    'result': result,
+                    'is_simulated': True,
+                    'note': 'API返回空结果，使用模拟响应'
+                })
+            except Exception as sim_err:
+                return jsonify({
+                    'success': False,
+                    'error': '语音识别处理错误，未返回结果'
+                }), 500
+        
+        return jsonify(response_data[0])
+            
+    except Exception as e:
+        error_msg = str(e)
+        print(f"语音识别服务错误: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        
+        # 尝试使用模拟响应
+        try:
+            from utils.speech_processor import SpeechProcessor
+            processor = SpeechProcessor()
+            text = processor._get_simulated_response()
+            command = processor.recognizer.parse_command(text)
+            handler = processor.command_handlers.get(command['type'], processor._handle_text)
+            result = handler(command)
+            
+            return jsonify({
+                'success': True,
+                'recognition_text': text,
+                'command': command,
+                'result': result,
+                'is_simulated': True,
+                'note': 'API服务错误，使用模拟响应'
+            })
+        except Exception as sim_err:
+            return jsonify({
+                'success': False,
+                'error': f'语音识别服务错误: {error_msg}'
+            }), 500
+
+@app.route('/api/speech/status', methods=['GET'])
+def get_speech_status():
+    """
+    获取语音识别状态
+    """
+    try:
+        from utils.speech_processor import SpeechProcessor
+        
+        processor = SpeechProcessor()
+        status = processor.get_status()
+        
+        return jsonify({
+            'success': True,
+            'status': status
+        })
+        
+    except Exception as e:
+        # logger.error(f"获取语音状态失败: {str(e)}") # logger is not defined, so commenting out
+        print(f"获取语音状态失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'获取状态失败: {str(e)}'
+        }), 500
+
+# 环境分析API
+@app.route('/api/yolo/analyze_environment', methods=['POST'])
+def analyze_environment():
+    """
+    环境分析API - 基于YOLO检测结果
+    """
+    try:
+        # 获取当前的检测结果
+        if hasattr(yolo_processor, 'get_latest_detection'):
+            detection_result = yolo_processor.get_latest_detection()
+            
+            if detection_result:
+                objects = detection_result.get('objects', [])
+                
+                # 分析环境
+                analysis_text = []
+                
+                # 统计对象类型
+                object_counts = {}
+                for obj in objects:
+                    obj_type = obj.get('class', 'unknown')
+                    object_counts[obj_type] = object_counts.get(obj_type, 0) + 1
+                
+                # 生成分析文本
+                if object_counts:
+                    for obj_type, count in object_counts.items():
+                        if count == 1:
+                            analysis_text.append(f"检测到1个{obj_type}")
+                        else:
+                            analysis_text.append(f"检测到{count}个{obj_type}")
+                    
+                    # 距离信息
+                    nearest_objects = sorted(objects, key=lambda x: x.get('distance', float('inf')))[:3]
+                    if nearest_objects:
+                        nearest = nearest_objects[0]
+                        distance = nearest.get('distance', 0)
+                        if distance > 0:
+                            analysis_text.append(f"最近的{nearest.get('class', '物体')}距离{distance:.1f}米")
+                    
+                    analysis = "，".join(analysis_text)
+                else:
+                    analysis = "当前环境中未检测到明显物体"
+                
+                return jsonify({
+                    'success': True,
+                    'analysis': analysis,
+                    'objects': objects,
+                    'object_counts': object_counts
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'analysis': '暂无检测数据，请确保视觉系统已启动',
+                    'objects': [],
+                    'object_counts': {}
+                })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'YOLO检测器未初始化'
+            }), 500
+            
+    except Exception as e:
+        # logger.error(f"环境分析失败: {str(e)}") # logger is not defined, so commenting out
+        print(f"环境分析失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'环境分析失败: {str(e)}'
+        }), 500
+
+# 导航API
+@app.route('/api/navigation/start', methods=['POST'])
+def start_navigation():
+    """
+    启动导航API
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'destination' not in data:
+            return jsonify({
+                'success': False,
+                'error': '缺少目的地信息'
+            }), 400
+        
+        destination = data['destination']
+        
+        # 这里可以集成真实的导航服务
+        # 目前返回模拟结果
+        return jsonify({
+            'success': True,
+            'message': f'导航已启动，目的地: {destination}',
+            'destination': destination,
+            'estimated_time': '15分钟',
+            'distance': '1.2公里'
+        })
+        
+    except Exception as e:
+        # logger.error(f"导航启动失败: {str(e)}") # logger is not defined, so commenting out
+        print(f"导航启动失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'导航启动失败: {str(e)}'
+        }), 500
+
+@app.route('/api/navigation/stop', methods=['POST'])
+def stop_navigation():
+    """停止导航"""
+    if not processors_available or not navigation_service:
+        return jsonify({'error': '导航服务不可用'}), 500
+    
+    try:
+        navigation_service.stop_navigation()
+        return jsonify({'success': True, 'message': '导航已停止'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/navigation/status', methods=['GET'])
+def get_navigation_status():
+    """获取导航状态"""
+    if not processors_available or not navigation_service:
+        return jsonify({'error': '导航服务不可用'}), 500
+    
+    try:
+        status = navigation_service.get_navigation_status()
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/navigation/search', methods=['POST'])
+def search_destination():
+    """搜索目的地"""
+    if not processors_available or not navigation_service:
+        return jsonify({'error': '导航服务不可用'}), 500
+    
+    try:
+        data = request.get_json()
+        query = data.get('query')
+        
+        if not query:
+            return jsonify({'error': '缺少搜索关键词'}), 400
+        
+        results = navigation_service.search_destination(query)
+        
+        return jsonify({
+            'success': True,
+            'results': results
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/integrated/status', methods=['GET'])
+def get_integrated_status():
+    """获取综合系统状态"""
+    try:
+        status = {
+            'timestamp': time.time(),
+            'processors_available': processors_available,
+            'yolo_processor': yolo_processor.get_status() if yolo_processor else None,
+            'audio_manager': audio_manager.get_status() if audio_manager else None,
+            'speech_processor': speech_processor.get_status() if speech_processor else None,
+            'navigation_service': navigation_service.get_status() if navigation_service else None,
+            'cameras': {
+                'd_estimator': d_estimator is not None,
+                'f_detector': f_detector is not None,
+                'f_tracker': f_tracker is not None,
+                'g_recognition': g_recognition is not None,
+                'g_recognizer': g_recognizer is not None,
+                'm_detector': m_detector is not None,
+                'p_video': p_video is not None,
+                's_RGB': s_RGB is not None
+            }
+        }
+        
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/integrated/status', methods=['GET'])
+def get_integrated_status_alternative():
+    """获取综合系统状态 - 兼容路径"""
+    return get_integrated_status()
+
+@app.route('/api/integrated/process_frame', methods=['POST'])
+def process_integrated_frame():
+    """综合处理单帧数据"""
+    if not processors_available or not yolo_processor:
+        return jsonify({'error': '处理器不可用'}), 500
+    
+    try:
+        # 这里应该从摄像头获取实际的图像和深度数据
+        # 暂时返回模拟数据
+        
+        # 模拟处理结果
+        result = {
+            'detections': [
+                {
+                    'class_name': 'person',
+                    'bbox': [100, 100, 200, 300],
+                    'confidence': 0.85,
+                    'distance': 150.0,
+                    'azimuth_angle': 15.0,
+                    'pitch_angle': -5.0
+                }
+            ],
+            'collision_risk': 0.2,
+            'azimuth_pitch_data': [
+                ['person', 15.0, -5.0, 150.0]
+            ],
+            'timestamp': time.time()
+        }
+        
+        # 如果有检测到的对象，播放3D音频
+        if result['azimuth_pitch_data'] and audio_manager:
+            audio_manager.add_audio_data(result['azimuth_pitch_data'])
+        
+        return jsonify({
+            'success': True,
+            'result': result
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/health')
 def health_check():
     status = {
         'status': 'online',
         'modules': {
             'video_modules': video_modules_available,
-            'database': db_available
+            'database': db_available,
+            'processors': processors_available
         },
         'cameras': {
             'd_estimator': d_estimator is not None,
@@ -1172,6 +1768,13 @@ def health_check():
             'm_detector': m_detector is not None,
             'p_video': p_video is not None,
             's_RGB': s_RGB is not None
+        },
+        'intelligent_processors': {
+            'yolo_processor': yolo_processor is not None,
+            'audio_manager': audio_manager is not None,
+            'speech_processor': speech_processor is not None,
+            'navigation_service': navigation_service is not None,
+            'trajectory_collision_manager': trajectory_collision_manager is not None
         }
     }
     return jsonify(status)
@@ -1185,9 +1788,25 @@ def server_error(error):
     return jsonify({'error': 'Internal server error', 'message': str(error)}), 500
 # 确保所有摄像头在程序退出时正确关闭
 def cleanup():
-    global d_estimator, f_detector, f_tracker, g_recognition, g_recognizer, m_detector, p_video, s_RGB
+    global d_estimator, f_detector, f_tracker, g_recognition, g_recognizer, m_detector, p_video, s_RGB, enhanced_detector
     
-    print("程序退出，正在安全关闭所有摄像头...")
+    print("程序退出，正在安全关闭所有资源...")
+    
+    # 关闭线程管理器
+    if thread_manager:
+        try:
+            thread_manager.shutdown()
+            print("线程管理器已关闭")
+        except Exception as e:
+            print(f"关闭线程管理器时出错: {e}")
+    
+    # 关闭设备管理器
+    if device_manager:
+        try:
+            device_manager.stop()
+            print("设备管理器已关闭")
+        except Exception as e:
+            print(f"关闭设备管理器时出错: {e}")
     
     # 创建摄像头名称映射
     cameras = {
@@ -1198,7 +1817,8 @@ def cleanup():
         'g_recognizer': g_recognizer,
         'm_detector': m_detector,
         'p_video': p_video,
-        's_RGB': s_RGB
+        's_RGB': s_RGB,
+        'enhanced_detector': enhanced_detector
     }
     
     # 逐个安全关闭摄像头
@@ -1212,12 +1832,762 @@ def cleanup():
             except Exception as e:
                 print(f"关闭 {name} 摄像头时出错: {str(e)}")
     
-    print("所有摄像头已关闭")
+    print("所有资源已关闭")
 
 atexit.register(cleanup)
 
+# 添加Vosk语音识别导航接口
+@app.route('/api/navigation/voice_navigate', methods=['POST'])
+def voice_navigate():
+    """
+    使用Vosk进行语音识别并设置为导航目的地
+    """
+    try:
+        if 'audio_file' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': '没有收到音频文件',
+                'message': '请提供音频文件'
+            }), 400
+        
+        audio_file = request.files['audio_file']
+        if audio_file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': '文件名为空',
+                'message': '请选择音频文件'
+            }), 400
+        
+        # 保存临时音频文件
+        temp_file_path = 'temp_audio.wav'
+        audio_file.save(temp_file_path)
+        
+        # 使用Vosk进行语音识别
+        try:
+            from vosk import Model, KaldiRecognizer, SetLogLevel
+            import wave
+            import json
+            
+            # 设置日志级别
+            SetLogLevel(0)
+            
+            # 打开音频文件
+            wf = wave.open(temp_file_path, "rb")
+            
+            # 检查音频格式
+            if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getcomptype() != "NONE":
+                return jsonify({
+                    'success': False,
+                    'error': '音频格式不支持',
+                    'message': '音频文件必须是单声道PCM格式的WAV文件'
+                }), 400
+            
+            # 查找模型路径
+            import os
+            possible_model_paths = [
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'vosk_model'),
+                os.path.join(os.getcwd(), 'resources', 'vosk_model'),
+                os.path.join(os.getcwd(), 'main', 'resources', 'vosk_model'),
+                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resources', 'vosk_model')
+            ]
+            
+            model_path = None
+            for path in possible_model_paths:
+                if os.path.exists(path) and any(os.listdir(path)):
+                    model_path = path
+                    break
+            
+            if not model_path:
+                return jsonify({
+                    'success': False,
+                    'error': '找不到Vosk模型',
+                    'message': '请先下载Vosk中文模型到resources/vosk_model目录'
+                }), 500
+            
+            # 加载模型并创建识别器
+            model = Model(model_path)
+            rec = KaldiRecognizer(model, wf.getframerate())
+            rec.SetWords(True)
+            
+            # 开始识别
+            results = []
+            
+            while True:
+                data = wf.readframes(4000)
+                if len(data) == 0:
+                    break
+                if rec.AcceptWaveform(data):
+                    result = json.loads(rec.Result())
+                    results.append(result.get("text", ""))
+            
+            # 添加最终结果
+            final_result = json.loads(rec.FinalResult())
+            results.append(final_result.get("text", ""))
+            
+            # 合并所有识别结果
+            full_text = " ".join([r for r in results if r])
+            
+            # 如果没有识别出文字，使用speech_processor的模拟响应
+            if not full_text:
+                # 导入SpeechProcessor
+                from utils.speech_processor import SpeechProcessor
+                speech_processor = SpeechProcessor()
+                full_text = speech_processor._get_simulated_response()
+            
+            # 解析识别结果中的导航目标
+            destination = full_text
+            
+            # 提取可能的目的地 - 简单处理，如果有"去"或"到"之类的词，取其后的内容
+            import re
+            nav_patterns = [
+                r'导航到(.+)',
+                r'去(.+)', 
+                r'前往(.+)',
+                r'到(.+)去',
+                r'我要去(.+)',
+                r'带我去(.+)'
+            ]
+            
+            # 尝试匹配导航模式
+            for pattern in nav_patterns:
+                match = re.search(pattern, full_text)
+                if match:
+                    destination = match.group(1).strip()
+                    break
+            
+            # 清理临时文件
+            wf.close()
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+            
+            # 返回识别结果和导航目标
+            return jsonify({
+                'success': True,
+                'recognized_text': full_text,
+                'destination': destination,
+                'message': f'正在导航到: {destination}'
+            })
+            
+        except ImportError:
+            # Vosk不可用，尝试使用speech_processor
+            from utils.speech_processor import SpeechProcessor
+            speech_processor = SpeechProcessor()
+            
+            with open(temp_file_path, 'rb') as f:
+                audio_data = f.read()
+            
+            # 使用SpeechProcessor的识别功能
+            result = speech_processor.recognizer.recognize_from_file(temp_file_path)
+            if not result:
+                result = speech_processor._get_simulated_response()
+            
+            # 解析命令
+            command = speech_processor.recognizer.parse_command(result)
+            
+            # 确定目的地
+            if command['type'] == 'navigation':
+                destination = command.get('destination', result)
+            else:
+                destination = result
+            
+            # 清理临时文件
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+            
+            return jsonify({
+                'success': True,
+                'recognized_text': result,
+                'destination': destination,
+                'message': f'正在导航到: {destination}',
+                'using_fallback': True
+            })
+            
+    except Exception as e:
+        # 确保临时文件被删除
+        import os
+        if os.path.exists('temp_audio.wav'):
+            os.remove('temp_audio.wav')
+        
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'message': '语音识别失败'
+        }), 500
+
+# ========== 轨迹追踪和碰撞预警API ==========
+
+@app.route('/api/trajectory/start', methods=['POST'])
+def start_trajectory_tracking():
+    """启动轨迹追踪"""
+    if not processors_available or not trajectory_collision_manager:
+        return jsonify({'error': '轨迹追踪服务不可用'}), 500
+    
+    try:
+        trajectory_collision_manager.start()
+        return jsonify({
+            'success': True,
+            'message': '轨迹追踪已启动'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/trajectory/stop', methods=['POST'])
+def stop_trajectory_tracking():
+    """停止轨迹追踪"""
+    if not processors_available or not trajectory_collision_manager:
+        return jsonify({'error': '轨迹追踪服务不可用'}), 500
+    
+    try:
+        trajectory_collision_manager.stop()
+        return jsonify({
+            'success': True,
+            'message': '轨迹追踪已停止'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/trajectory/status', methods=['GET'])
+def get_trajectory_status():
+    """获取轨迹追踪状态"""
+    if not processors_available or not trajectory_collision_manager:
+        return jsonify({'error': '轨迹追踪服务不可用'}), 500
+    
+    try:
+        status = trajectory_collision_manager.get_comprehensive_status()
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/collision/risk', methods=['GET'])
+def get_collision_risk():
+    """获取碰撞风险"""
+    
+    def safe_time_to_collision(time_val):
+        """安全处理time_to_collision值，将Infinity转换为null"""
+        if time_val == float('inf') or time_val == float('-inf') or time_val != time_val:  # 检查NaN
+            return None
+        return time_val
+    
+    try:
+        # 如果轨迹碰撞管理器不可用，返回默认值
+        if not trajectory_collision_manager:
+            return jsonify({
+                'success': True,
+                'max_probability': 0.0,
+                'risk': {
+                    'level': 'low',
+                    'probability': 0.0,
+                    'time_to_collision': None,  # 使用null而不是Infinity
+                    'warning_message': '碰撞预警服务未启动',
+                    'nearest_object': None
+                },
+                'tracks': {},
+                'detected_objects': []
+            })
+        
+        # 获取碰撞数据
+        collision_data = trajectory_collision_manager.get_collision_data()
+        
+        # 获取风险信息
+        risk = trajectory_collision_manager.collision_warning.get_collision_risk()
+        
+        return jsonify({
+            'success': True,
+            'max_probability': collision_data['max_probability'] * 100,  # 转换为百分比
+            'risk': {
+                'level': risk.level,
+                'probability': risk.probability * 100,  # 转换为百分比
+                'time_to_collision': safe_time_to_collision(risk.time_to_collision),
+                'warning_message': risk.warning_message,
+                'nearest_object': {
+                    'type': risk.nearest_object.type,
+                    'distance': risk.nearest_object.distance,
+                    'position': risk.nearest_object.position,
+                    'confidence': risk.nearest_object.confidence
+                } if risk.nearest_object else None
+            },
+            'tracks': collision_data['tracks'],
+            'detected_objects': collision_data['detected_objects']
+        })
+    except Exception as e:
+        print(f"获取碰撞风险时出错: {e}")
+        # 发生错误时返回默认值，而不是500错误
+        return jsonify({
+            'success': True,
+            'max_probability': 0.0,
+            'risk': {
+                'level': 'low',
+                'probability': 0.0,
+                'time_to_collision': None,  # 使用null而不是Infinity
+                'warning_message': '碰撞检测暂时不可用',
+                'nearest_object': None
+            },
+            'tracks': {},
+            'detected_objects': []
+        })
+
+@app.route('/api/collision/objects', methods=['GET'])
+def get_detected_objects():
+    """获取检测到的对象"""
+    if not processors_available or not trajectory_collision_manager:
+        return jsonify({'error': '碰撞预警服务不可用'}), 500
+    
+    try:
+        objects = trajectory_collision_manager.collision_warning.get_detected_objects()
+        return jsonify({
+            'success': True,
+            'objects': [
+                {
+                    'id': obj.id,
+                    'type': obj.type,
+                    'position': obj.position,
+                    'distance': obj.distance,
+                    'velocity': obj.velocity,
+                    'confidence': obj.confidence,
+                    'timestamp': obj.timestamp
+                }
+                for obj in objects
+            ]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/trajectory/data', methods=['GET'])
+def get_trajectory_data():
+    """获取轨迹数据"""
+    if not processors_available or not trajectory_collision_manager:
+        return jsonify({'error': '轨迹追踪服务不可用'}), 500
+    
+    try:
+        data = trajectory_collision_manager.trajectory_tracker.get_trajectory_data()
+        return jsonify({
+            'success': True,
+            'data': data
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/trajectory/current_position', methods=['GET'])
+def get_current_position():
+    """获取当前位置"""
+    if not processors_available or not trajectory_collision_manager:
+        return jsonify({'error': '轨迹追踪服务不可用'}), 500
+    
+    try:
+        position = trajectory_collision_manager.trajectory_tracker.get_current_position()
+        if position:
+            return jsonify({
+                'success': True,
+                'position': {
+                    'lng': position.lng,
+                    'lat': position.lat,
+                    'timestamp': position.timestamp,
+                    'speed': position.speed,
+                    'direction': position.direction
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': '当前位置不可用'
+            })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ========== 增强检测器API ==========
+
+@app.route('/enhanced_detector/start', methods=['POST'])
+def start_enhanced_detector():
+    """启动增强检测器（带碰撞检测）"""
+    global enhanced_detector
+    
+    print("🚀 启动增强检测器请求")
+    
+    # 检查请求频率
+    if not check_request_rate('enhanced_detector', 'start'):
+        return jsonify({'message': '请求过于频繁，请稍后再试'}), 429
+    
+    try:
+        # 确保设备管理器已启动 - 只启动一次
+        if device_manager and not device_manager.is_running():
+            print("🚀 启动设备管理器...")
+            if not device_manager.start():
+                return jsonify({
+                    'message': '设备管理器启动失败',
+                    'timestamp': time.time()
+                }), 500
+        
+        if enhanced_detector is None:
+            print("🔧 创建增强检测器实例...")
+            enhanced_detector = EnhancedDetector(
+                camera_size=720,
+                use_yolo=True,
+                confidence_threshold=0.5
+            )
+            
+            # 设置碰撞管理器
+            if trajectory_collision_manager:
+                print("🔗 设置碰撞管理器...")
+                enhanced_detector.set_collision_manager(trajectory_collision_manager)
+                trajectory_collision_manager.start()
+                print("✅ 碰撞管理器已启动")
+                
+                # 启动后台处理 - 现在不会重复启动设备管理器
+                if enhanced_detector.start_background_processing():
+                    print("✅ 增强检测器后台处理已启动")
+                else:
+                    print("⚠️ 增强检测器后台处理启动失败")
+            else:
+                print("❌ 碰撞管理器不可用")
+            
+            return jsonify({
+                'message': '增强检测器已启动',
+                'timestamp': time.time(),
+                'collision_tracking': trajectory_collision_manager is not None
+            }), 200
+        else:
+            print("ℹ️ 增强检测器已在运行")
+            # 如果已存在，确保后台处理在运行
+            if not enhanced_detector.background_running:
+                enhanced_detector.start_background_processing()
+            return jsonify({'message': '增强检测器已在运行', 'timestamp': time.time()}), 200
+    except Exception as e:
+        print(f"❌ 启动增强检测器失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'message': f'启动失败: {str(e)}'}), 500
+
+
+@app.route('/enhanced_detector/stop', methods=['POST'])
+def stop_enhanced_detector():
+    """停止增强检测器"""
+    global enhanced_detector
+    
+    # 检查请求频率
+    if not check_request_rate('enhanced_detector', 'stop'):
+        return jsonify({'message': '请求过于频繁，请稍后再试'}), 429
+    
+    try:
+        if enhanced_detector is not None:
+            # 停止碰撞管理器
+            if trajectory_collision_manager:
+                trajectory_collision_manager.stop()
+            
+            # 使用安全关闭方法
+            success, error_msg = safe_shutdown_camera(enhanced_detector, 'enhanced_detector')
+            enhanced_detector = None
+            
+            if success:
+                return jsonify({'message': '增强检测器已停止', 'timestamp': time.time()}), 200
+            else:
+                return jsonify({'message': f'增强检测器已停止，但有警告: {error_msg}', 'timestamp': time.time()}), 200
+        return jsonify({'message': '增强检测器未在运行', 'timestamp': time.time()}), 200
+    except Exception as e:
+        return jsonify({'message': f'停止失败: {str(e)}'}), 500
+
+
+@app.route('/enhanced_detector/video_feed')
+def enhanced_detector_feed():
+    """使用多线程管理器获取增强检测器视频流"""
+    print("请求增强检测器视频流")
+    
+    if not thread_manager:
+        return jsonify({"error": "线程管理器未初始化"}), 500
+    
+    if enhanced_detector is None:
+        return jsonify({"error": "增强检测器未初始化"}), 503
+    
+    try:
+        stream_id = f"enhanced_detector_{id(enhanced_detector)}"
+        return create_threaded_video_stream(stream_id, enhanced_detector.run)
+    except Exception as e:
+        logger.error(f"增强检测器视频流启动失败: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/enhanced_detector/status', methods=['GET'])
+def get_enhanced_detector_status():
+    """获取增强检测器状态（调试用）"""
+    global enhanced_detector, trajectory_collision_manager
+    
+    status = {
+        'enhanced_detector': {
+            'exists': enhanced_detector is not None,
+            'running': enhanced_detector.continue_running if enhanced_detector else False,
+            'collision_manager_set': enhanced_detector.collision_manager is not None if enhanced_detector else False
+        },
+        'trajectory_collision_manager': {
+            'exists': trajectory_collision_manager is not None,
+            'running': trajectory_collision_manager.is_running if trajectory_collision_manager else False,
+            'yolo_model_loaded': trajectory_collision_manager.yolo_model is not None if trajectory_collision_manager else False
+        },
+        'timestamp': time.time()
+    }
+    
+    return jsonify(status), 200
+
+
+@app.route('/api/streams/stats', methods=['GET'])
+def get_stream_stats():
+    """获取所有视频流统计信息"""
+    try:
+        if not thread_manager:
+            return jsonify({
+                'status': 'error',
+                'message': '线程管理器不可用',
+                'timestamp': time.time()
+            }), 503
+        
+        stats = thread_manager.get_all_stats()
+        
+        return jsonify({
+            'status': 'success',
+            'data': stats,
+            'timestamp': time.time()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'获取流统计失败: {str(e)}',
+            'timestamp': time.time()
+        }), 500
+
+@app.route('/api/streams/health', methods=['GET'])
+def get_stream_health():
+    """获取视频流健康状态"""
+    try:
+        from utils.stream_optimizer import get_stream_optimizer
+        optimizer = get_stream_optimizer()
+        stats = optimizer.get_stream_stats()
+        
+        # 分析健康状态
+        healthy_streams = []
+        unhealthy_streams = []
+        
+        for stream_id, stream_stats in stats.items():
+            if stream_stats.get('avg_fps', 0) > 15 and stream_stats.get('frames_dropped', 0) < 10:
+                healthy_streams.append({
+                    'id': stream_id,
+                    'fps': stream_stats.get('avg_fps', 0),
+                    'status': 'healthy'
+                })
+            else:
+                unhealthy_streams.append({
+                    'id': stream_id,
+                    'fps': stream_stats.get('avg_fps', 0),
+                    'dropped_frames': stream_stats.get('frames_dropped', 0),
+                    'status': 'unhealthy'
+                })
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'healthy_count': len(healthy_streams),
+                'unhealthy_count': len(unhealthy_streams),
+                'healthy_streams': healthy_streams,
+                'unhealthy_streams': unhealthy_streams,
+                'total_streams': len(stats)
+            },
+            'timestamp': time.time()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'获取流健康状态失败: {str(e)}',
+            'timestamp': time.time()
+        }), 500
+
+# 导入全局帧缓存
+try:
+    from utils.global_frame_cache import get_global_frame_cache
+    global_frame_cache = get_global_frame_cache()
+    print("✅ 全局帧缓存导入成功")
+except Exception as e:
+    print(f"❌ 导入全局帧缓存失败: {e}")
+    import traceback
+    traceback.print_exc()
+    global_frame_cache = None
+
+# 导入环境感知处理器
+try:
+    from utils.environment_processor import get_environment_processor
+    environment_processor = get_environment_processor()
+    
+    # 连接全局帧缓存
+    if environment_processor and global_frame_cache:
+        environment_processor.set_global_frame_cache(global_frame_cache)
+        print("✅ 环境感知处理器已连接到全局帧缓存")
+    else:
+        print(f"⚠️ 连接失败: 环境处理器={environment_processor is not None}, 全局缓存={global_frame_cache is not None}")
+    
+    print("✅ 环境感知处理器导入成功")
+except Exception as e:
+    print(f"❌ 导入环境感知处理器失败: {e}")
+    import traceback
+    traceback.print_exc()
+    environment_processor = None
+
+# 确保设备管理器连接到全局帧缓存
+if device_manager and global_frame_cache:
+    print("🔗 确保设备管理器连接到全局帧缓存")
+    # 设备管理器已经在初始化时连接了全局帧缓存
+else:
+    print("⚠️ 设备管理器或全局帧缓存不可用")
+
+# ========== 新增的环境感知API ==========
+
+@app.route('/api/environment/process_frame', methods=['POST'])
+def api_environment_process_frame():
+    """处理单帧环境感知数据"""
+    try:
+        if not environment_processor:
+            return jsonify({"success": False, "error": "环境感知处理器未初始化"})
+        
+        # 从请求中获取图像数据
+        data = request.get_json()
+        if not data or 'image_data' not in data:
+            return jsonify({"success": False, "error": "缺少图像数据"})
+        
+        # 这里可以处理base64图像数据
+        # 暂时返回成功状态
+        return jsonify({"success": True, "message": "帧处理请求已接收"})
+        
+    except Exception as e:
+        logger.error(f"环境感知帧处理错误: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/environment/status', methods=['GET'])
+def api_environment_status():
+    """获取环境感知处理器状态"""
+    try:
+        if not environment_processor:
+            return jsonify({"success": False, "error": "环境感知处理器未初始化"})
+        
+        status = environment_processor.get_status()
+        return jsonify({"success": True, "status": status})
+        
+    except Exception as e:
+        logger.error(f"获取环境感知状态错误: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/environment/start', methods=['POST'])
+def api_environment_start():
+    """启动环境感知处理"""
+    try:
+        if not environment_processor:
+            return jsonify({"success": False, "error": "环境感知处理器未初始化"})
+        
+        # 首先确保设备管理器运行
+        if device_manager and not device_manager.is_running():
+            print("🚀 启动设备管理器以提供真实数据...")
+            device_success = device_manager.start()
+            if not device_success:
+                return jsonify({"success": False, "error": "设备管理器启动失败，无法获取摄像头数据"})
+            
+            # 等待设备稳定
+            import time
+            time.sleep(2)
+        
+        # 启动环境感知处理
+        environment_processor.start_processing()
+        
+        return jsonify({"success": True, "message": "环境感知处理已启动，使用真实摄像头数据"})
+        
+    except Exception as e:
+        logger.error(f"启动环境感知处理错误: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/environment/stop', methods=['POST'])
+def api_environment_stop():
+    """停止环境感知处理"""
+    try:
+        if environment_processor:
+            environment_processor.stop_processing()
+            
+        # 停止设备管理器
+        if device_manager and device_manager.is_running():
+            print("🛑 停止设备管理器...")
+            device_manager.stop()
+            
+        return jsonify({"success": True, "message": "环境感知处理已停止"})
+        
+    except Exception as e:
+        logger.error(f"停止环境感知处理错误: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/environment/latest_result', methods=['GET'])
+def api_environment_latest_result():
+    """获取最新的环境感知结果"""
+    try:
+        if not environment_processor:
+            return jsonify({"success": False, "error": "环境感知处理器未初始化"})
+        
+        result = environment_processor.get_latest_result()
+        if result:
+            return jsonify({"success": True, "result": result})
+        else:
+            return jsonify({"success": False, "error": "暂无处理结果"}), 404
+        
+    except Exception as e:
+        logger.error(f"获取环境感知结果错误: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+# ========== 删除模拟数据控制API，使用真实设备数据 ==========
+
+@app.route('/api/device/start', methods=['POST'])
+def api_device_start():
+    """启动设备管理器"""
+    try:
+        if not device_manager:
+            return jsonify({"success": False, "error": "设备管理器未初始化"})
+        
+        if device_manager.is_running():
+            return jsonify({"success": False, "error": "设备管理器已在运行"})
+        
+        success = device_manager.start()
+        if success:
+            return jsonify({"success": True, "message": "设备管理器已启动"})
+        else:
+            return jsonify({"success": False, "error": "设备管理器启动失败"})
+        
+    except Exception as e:
+        logger.error(f"启动设备管理器错误: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/device/stop', methods=['POST'])
+def api_device_stop():
+    """停止设备管理器"""
+    try:
+        if device_manager and device_manager.is_running():
+            device_manager.stop()
+            
+        return jsonify({"success": True, "message": "设备管理器已停止"})
+        
+    except Exception as e:
+        logger.error(f"停止设备管理器错误: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/device/status', methods=['GET'])
+def api_device_status():
+    """获取设备管理器状态"""
+    try:
+        if not device_manager:
+            return jsonify({"success": False, "error": "设备管理器未初始化"})
+        
+        status = {
+            'is_running': device_manager.is_running(),
+            'stats': device_manager.get_stats() if device_manager.is_running() else {},
+            'latest_data_available': bool(device_manager.get_latest_data().get('color') is not None) if device_manager.is_running() else False
+        }
+        return jsonify({"success": True, "status": status})
+        
+    except Exception as e:
+        logger.error(f"获取设备管理器状态错误: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
 if __name__ == '__main__':
     import sys
+    import threading
+    
     port = 5000
     if len(sys.argv) > 1:
         try:
@@ -1225,5 +2595,46 @@ if __name__ == '__main__':
         except ValueError:
             print(f"无效的端口号: {sys.argv[1]}, 使用默认端口5000")
     
+    def initialize_device_manager():
+        """在独立线程中初始化设备管理器"""
+        try:
+            if device_manager:
+                print("🚀 后台初始化设备管理器...")
+                
+                # 检查设备是否已经在运行
+                if device_manager.is_running():
+                    print("✅ 设备管理器已在运行")
+                    return
+                
+                # 尝试启动设备管理器
+                success = device_manager.start()
+                if success:
+                    print("✅ 设备管理器后台初始化成功")
+                    
+                    # 等待一下确保设备完全启动
+                    time.sleep(2)
+                    
+                    # 验证设备状态
+                    if device_manager.is_running():
+                        print("📊 设备管理器运行状态确认成功")
+                    else:
+                        print("⚠️ 设备管理器状态验证失败")
+                else:
+                    print("⚠️ 设备管理器初始化失败，某些功能可能不可用")
+                    print("   提示：请检查DepthAI设备是否正确连接")
+            else:
+                print("❌ 设备管理器实例不存在")
+        except Exception as e:
+            print(f"❌ 设备管理器初始化异常: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # 在独立线程中启动设备管理器，避免阻塞Flask启动
+    device_thread = threading.Thread(target=initialize_device_manager, daemon=True)
+    device_thread.start()
+    
     print(f"服务器正在运行，访问 http://localhost:{port}")
-    app.run(threaded=True, debug=True, host="localhost", port=port)
+    print("设备管理器正在后台初始化...")
+    
+    # 启动Flask应用，设置线程模式，关闭调试模式避免重载冲突
+    app.run(threaded=True, debug=False, host="localhost", port=port, use_reloader=False)

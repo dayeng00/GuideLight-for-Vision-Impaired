@@ -55,6 +55,10 @@ export default defineConfig({
         target: 'http://localhost:5000',
         changeOrigin: true
       },
+      '/enhanced_detector': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
+      },
       '/location': {
         target: 'http://localhost:5000',
         changeOrigin: true

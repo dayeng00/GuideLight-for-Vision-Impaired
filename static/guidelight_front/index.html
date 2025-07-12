@@ -5,8 +5,13 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>视障人士辅助系统 - 家人视角</title>
-    <!-- 引入高德地图API -->
-    <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=67eb32d02affc1b660c6b67f48feee22"></script>
+    <!-- 高德地图API -->
+    <script type="text/javascript">
+      window._AMapSecurityConfig = {
+        securityJsCode: 'aaa4fcbdf20f0034b736d8a507bb9cce'
+      }
+    </script>
+    <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=6a7bb6c35b9a1c699b765d3b415e5e08&plugin=AMap.Scale,AMap.ToolBar,AMap.Walking,AMap.Geocoder"></script>
   </head>
   <body>
     <div id="app"></div>

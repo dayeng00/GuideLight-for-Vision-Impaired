@@ -54,8 +54,16 @@ const routes: RouteRecordRaw[] = [
     name: 'IntegratedMonitoring',
     component: () => import('../views/IntegratedMonitoring.vue'),
     meta: {
-      title: '综合监控',
+      title: '智能综合监控系统',
       requiresAuth: true
+    }
+  },
+  {
+    path: '/voice-navigation',
+    name: 'VoiceNavigation',
+    component: () => import('../views/VoiceNavigation.vue'),
+    meta: {
+      title: '语音导航'
     }
   },
   {
