@@ -496,50 +496,9 @@
           </div>
         </div>
 
-        <!-- 3D音频控制 -->
-        <div class="audio-control-panel">
-          <div class="panel-header">
-            <h3>3D音频系统</h3>
-          </div>
-          
-          <div class="audio-controls">
-            <div class="audio-switch">
-              <el-switch 
-                v-model="audio3D.enabled"
-                @change="toggle3DAudio"
-                size="large"
-              />
-              <span>3D音频增强</span>
-            </div>
-            
-            <div class="volume-control">
-              <span>音量: {{ audio3D.volume }}%</span>
-              <el-slider 
-                v-model="audio3D.volume"
-                @change="updateAudioVolume"
-                :min="0"
-                :max="100"
-                :step="5"
-              />
-            </div>
-            
-            <div class="audio-effects">
-              <h4>音效设置</h4>
-              <div class="effect-list">
-                <div 
-                  v-for="effect in audioEffects" 
-                  :key="effect.id"
-                  class="effect-item"
-                  :class="{ active: effect.enabled }"
-                  @click="toggleAudioEffect(effect.id)"
-                >
-                  <span class="effect-icon">{{ effect.icon }}</span>
-                  <span class="effect-name">{{ effect.name }}</span>
-                  <el-switch v-model="effect.enabled" size="small" />
-                </div>
-              </div>
-            </div>
-          </div>
+        <!-- 用户行为识别面板 -->
+        <div class="user-behavior-analysis-panel">
+          <UserBehaviorPanel />
         </div>
 
         <!-- 碰撞概率分析 -->
@@ -579,43 +538,92 @@
     <div class="bottom-control-bar">
       <!-- 性能指标 -->
       <div class="performance-indicators">
-        <div class="indicator">
-          <span class="indicator-label">FPS:</span>
-          <span class="indicator-value">{{ currentFPS }}</span>
+        <div class="performance-header">
+          <h4>性能监控</h4>
+          <div class="performance-actions">
+            <el-button size="small" @click="resetPerformanceStats">重置</el-button>
+          </div>
         </div>
-        <div class="indicator">
-          <span class="indicator-label">延迟:</span>
-          <span class="indicator-value">{{ currentLatency }}ms</span>
-        </div>
-        <div class="indicator">
-          <span class="indicator-label">内存:</span>
-          <span class="indicator-value">{{ memoryUsage }}MB</span>
-        </div>
-        <div class="indicator">
-          <span class="indicator-label">CPU:</span>
-          <span class="indicator-value">{{ cpuUsage }}%</span>
+        
+        <div class="indicators-grid">
+          <div class="indicator-card">
+            <div class="indicator-icon">📊</div>
+            <div class="indicator-content">
+              <span class="indicator-label">FPS</span>
+              <span class="indicator-value">{{ currentFPS }}</span>
+            </div>
+            <div class="indicator-progress">
+              <div class="progress-bar">
+                <div class="progress-fill" :style="{ width: (currentFPS / 60) * 100 + '%' }"></div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="indicator-card">
+            <div class="indicator-icon">⏱️</div>
+            <div class="indicator-content">
+              <span class="indicator-label">延迟</span>
+              <span class="indicator-value">{{ currentLatency }}ms</span>
+            </div>
+            <div class="indicator-progress">
+              <div class="progress-bar">
+                <div class="progress-fill" :style="{ width: Math.max(0, 100 - (currentLatency / 100) * 100) + '%' }"></div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="indicator-card">
+            <div class="indicator-icon">💾</div>
+            <div class="indicator-content">
+              <span class="indicator-label">内存</span>
+              <span class="indicator-value">{{ memoryUsage }}MB</span>
+            </div>
+            <div class="indicator-progress">
+              <div class="progress-bar">
+                <div class="progress-fill" :style="{ width: (memoryUsage / 1024) * 100 + '%' }"></div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="indicator-card">
+            <div class="indicator-icon">🔥</div>
+            <div class="indicator-content">
+              <span class="indicator-label">CPU</span>
+              <span class="indicator-value">{{ cpuUsage }}%</span>
+            </div>
+            <div class="indicator-progress">
+              <div class="progress-bar">
+                <div class="progress-fill" :style="{ width: cpuUsage + '%' }"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- 终端日志 -->
-      <div class="terminal-section">
-        <div class="terminal-header">
+      <!-- 系统日志 -->
+      <div class="system-logs-panel">
+        <div class="panel-header">
           <h4>系统日志</h4>
-          <div class="terminal-actions">
+          <div class="log-actions">
             <el-button size="small" @click="clearTerminal">清除</el-button>
             <el-button size="small" @click="exportLogs">导出</el-button>
           </div>
         </div>
         
-        <div class="terminal-output" ref="terminalOutput">
+        <div class="logs-container" ref="terminalOutput">
           <div 
             v-for="log in terminalLogs" 
             :key="log.timestamp"
-            class="terminal-log"
+            class="log-item"
             :class="log.type"
           >
             <span class="log-timestamp">{{ formatTime(log.timestamp) }}</span>
             <span class="log-message">{{ log.message }}</span>
+          </div>
+          
+          <div v-if="terminalLogs.length === 0" class="no-logs">
+            <el-icon><Monitor /></el-icon>
+            <span>暂无日志记录</span>
           </div>
         </div>
       </div>
@@ -654,9 +662,10 @@ import {
   Close
 } from '@element-plus/icons-vue'
 // @ts-ignore
-import { videoApi, yoloApi, audioApi, speechApi, navigationApi, integratedApi, environmentApi } from '../api'
+import { videoApi, yoloApi, speechApi, navigationApi, integratedApi, environmentApi } from '../api'
 import * as echarts from 'echarts'
 import BEVCanvas from '../components/BEVCanvas.vue'
+import UserBehaviorPanel from '../components/UserBehaviorPanel.vue'
 // 在文件顶部添加导入
 import { SpeechRecognitionClient } from '../utils/audioProcessor'
 import { streamMonitor } from '../utils/streamMonitor'
@@ -671,10 +680,7 @@ interface NearestObject {
   distance: number
 }
 
-interface Audio3D {
-  enabled: boolean
-  volume: number
-}
+
 
 interface TerminalLog {
   timestamp: number
@@ -710,10 +716,7 @@ const videoStreams = reactive<Record<string, VideoStream>>({
   depth: { status: 'inactive' }
 })
 
-const audio3D = reactive<Audio3D>({
-  enabled: false,
-  volume: 50
-})
+
 
 const terminalLogs = ref<TerminalLog[]>([
   {
@@ -852,13 +855,7 @@ const speechRecognitionClient = ref<SpeechRecognitionClient | null>(null)
 const voiceStatus = ref<'idle' | 'listening' | 'processing'>('idle')
 const lastVoiceCommand = ref<any>(null)
 
-// 音效列表
-const audioEffects = ref([
-  { id: 'beep', name: '提示音', icon: '🔔', enabled: true },
-  { id: 'voice', name: '语音提示', icon: '🗣️', enabled: true },
-  { id: 'spatial', name: '空间音效', icon: '🌊', enabled: false },
-  { id: 'collision', name: '碰撞警告', icon: '⚠️', enabled: true }
-])
+
 
 // 导航相关
 const currentLocation = reactive({
@@ -1038,14 +1035,7 @@ const resetBEVView = () => {
   addTerminalLog('BEV视图已重置', 'info')
 }
 
-const toggle3DAudio = () => {
-  audio3D.enabled = !audio3D.enabled
-  addTerminalLog(`3D音频已${audio3D.enabled ? '开启' : '关闭'}`, 'info')
-}
 
-const updateAudioVolume = (value: number) => {
-  addTerminalLog(`音量调整为${value}%`, 'info')
-}
 
 const switchAlgorithm = () => {
   const algo = algorithms.value.find(a => a.id === selectedAlgorithm.value)
@@ -1077,6 +1067,14 @@ const clearTerminal = () => {
   addTerminalLog('终端已清除', 'info')
 }
 
+const resetPerformanceStats = () => {
+  currentFPS.value = 30
+  currentLatency.value = 25
+  memoryUsage.value = 256
+  cpuUsage.value = 35
+  addTerminalLog('性能统计已重置', 'info')
+}
+
 const exportLogs = () => {
   const logs = terminalLogs.value.map(log => 
     `${formatTime(log.timestamp)} [${log.type.toUpperCase()}] ${log.message}`
@@ -1097,31 +1095,76 @@ const formatTime = (timestamp: number) => {
 
 const refreshCollisionData = async () => {
   try {
-    
     const response = await fetch('http://localhost:5000/api/collision/risk')
     if (response.ok) {
       const data = await response.json()
       
-      // 更新碰撞概率
-      collisionProbability.value = data.max_probability || 0
-      
-      // 更新预测时间和最近物体信息
-      if (data.risk) {
-        // 处理time_to_collision，如果是null或undefined则设为0
-        predictedTime.value = (data.risk.time_to_collision !== null && data.risk.time_to_collision !== undefined) ? data.risk.time_to_collision : 0
+              // 修复碰撞概率显示问题 - 确保数据格式正确
+        if (data.success !== false) {
+          // 更新碰撞概率 - 优先使用risk.probability，如果没有则使用max_probability
+          let probabilityValue = 0
+          if (data.risk && data.risk.probability !== undefined && data.risk.probability !== null) {
+            probabilityValue = data.risk.probability
+          } else if (data.max_probability !== undefined && data.max_probability !== null) {
+            probabilityValue = data.max_probability
+          }
+          
+          collisionProbability.value = Math.min(Math.max(probabilityValue, 0), 100)
         
-        if (data.risk.nearest_object) {
-          nearestObject.name = data.risk.nearest_object.type || '未知'
-          nearestObject.distance = data.risk.nearest_object.distance || 0
-        }
-        
-        // 记录碰撞风险等级
-        const riskLevel = data.risk.level
-        const logType = riskLevel === 'high' ? 'error' : riskLevel === 'medium' ? 'warning' : 'info'
-        addTerminalLog(`碰撞风险: ${riskLevel} - ${data.risk.warning_message}`, logType)
+        // 更新预测时间和最近物体信息
+        if (data.risk) {
+          // 处理time_to_collision，如果是null或undefined则设为0
+          predictedTime.value = (data.risk.time_to_collision !== null && data.risk.time_to_collision !== undefined) ? data.risk.time_to_collision : 0
+          
+          if (data.risk.nearest_object) {
+            nearestObject.name = data.risk.nearest_object.type || '未知'
+            nearestObject.distance = data.risk.nearest_object.distance || 0
+          } else {
+            // 如果没有nearest_object，但有detected_objects，使用最近的一个
+            if (data.detected_objects && data.detected_objects.length > 0) {
+              const nearest = data.detected_objects.reduce((prev, current) => 
+                prev.distance < current.distance ? prev : current
+              )
+              nearestObject.name = nearest.type || '未知'
+              nearestObject.distance = nearest.distance || 0
+            } else {
+              nearestObject.name = '无检测对象'
+              nearestObject.distance = 0
+            }
+          }
+          
+                      // 记录碰撞风险等级
+            const riskLevel = data.risk.level
+            const logType = riskLevel === 'critical' ? 'error' : riskLevel === 'high' ? 'error' : riskLevel === 'medium' ? 'warning' : 'info'
+            addTerminalLog(`碰撞风险: ${riskLevel} - ${data.risk.warning_message}`, logType)
+          }
+          
+          // 记录检测到的对象信息
+          if (data.detected_objects && data.detected_objects.length > 0) {
+            addTerminalLog(`检测到 ${data.detected_objects.length} 个对象`, 'info')
+            data.detected_objects.forEach(obj => {
+              addTerminalLog(`- ${obj.type}: 距离${obj.distance.toFixed(2)}m, 置信度${(obj.confidence * 100).toFixed(1)}%`, 'info')
+            })
+          }
+          
+          addTerminalLog(`碰撞概率数据已更新: ${collisionProbability.value.toFixed(1)}% (风险等级: ${data.risk?.level || '未知'})`, 'success')
+          
+          // 调试信息
+          console.log('碰撞概率数据更新:', {
+            risk_probability: data.risk?.probability,
+            max_probability: data.max_probability,
+            final_probability: collisionProbability.value,
+            nearest_object: nearestObject.name,
+            distance: nearestObject.distance
+          })
+      } else {
+        // 如果API返回success: false，使用默认值
+        collisionProbability.value = 0
+        predictedTime.value = 0
+        nearestObject.name = '服务不可用'
+        nearestObject.distance = 0
+        addTerminalLog('碰撞检测服务返回错误状态', 'warning')
       }
-      
-      addTerminalLog('碰撞概率数据已更新', 'success')
     } else {
       // API调用失败，显示0值
       console.warn('碰撞数据API调用失败，状态码:', response.status)
@@ -1316,14 +1359,7 @@ const toggleVoiceRecognition = async () => {
   }
 }
 
-// 音效控制
-const toggleAudioEffect = (effectId: string) => {
-  const effect = audioEffects.value.find(e => e.id === effectId)
-  if (effect) {
-    effect.enabled = !effect.enabled
-    addTerminalLog(`${effect.name}已${effect.enabled ? '开启' : '关闭'}`, 'info')
-  }
-}
+
 
 // 实时数据处理
 const startRealTimeProcessing = () => {
@@ -2102,9 +2138,10 @@ onBeforeUnmount(() => {
 .bev-section,
 .navigation-container,
 .voice-interaction-panel,
-.audio-control-panel,
 .risk-assessment-panel,
-.system-terminal-panel {
+.system-terminal-panel,
+.user-behavior-analysis-panel,
+.collision-analysis-panel {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -2120,7 +2157,6 @@ onBeforeUnmount(() => {
 .bev-section:hover,
 .navigation-container:hover,
 .voice-interaction-panel:hover,
-.audio-control-panel:hover,
 .risk-assessment-panel:hover,
 .system-terminal-panel:hover {
   border-color: rgba(64, 158, 255, 0.4);
@@ -2935,50 +2971,13 @@ onBeforeUnmount(() => {
   }
 }
 
-/* 音频控制 */
-.volume-control {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 15px;
-}
 
-.audio-effects {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 15px;
-}
 
-.effect-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.9rem;
-}
-
-.audio-visualization {
-  height: 60px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 8px;
-  padding: 10px;
-  display: flex;
-  align-items: end;
-  justify-content: center;
-}
-
-.freq-bars {
-  display: flex;
-  align-items: end;
-  gap: 2px;
-  height: 100%;
-}
-
-.freq-bar {
-  width: 4px;
-  background: linear-gradient(to top, #409EFF, #67C23A);
-  border-radius: 2px;
-  transition: height 0.1s ease;
+/* 用户行为识别面板 */
+.user-behavior-analysis-panel {
+  background: linear-gradient(135deg, rgba(230, 162, 60, 0.1) 0%, rgba(64, 158, 255, 0.1) 100%);
+  border: 2px solid rgba(230, 162, 60, 0.3);
+  box-shadow: 0 12px 48px rgba(230, 162, 60, 0.2);
 }
 
 /* 风险评估 */
@@ -3059,59 +3058,134 @@ onBeforeUnmount(() => {
   font-family: 'Courier New', monospace;
 }
 
-.terminal-output {
+/* 系统日志面板样式 */
+.system-logs-panel {
+  flex: 2;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+  padding: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  min-height: 420px;
 }
 
-.terminal-line {
+.system-logs-panel .panel-header {
   display: flex;
-  gap: 8px;
-  font-size: 0.75rem;
-  line-height: 1.4;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.terminal-line.info {
+.system-logs-panel .panel-header h4 {
+  margin: 0;
   color: #409EFF;
-}
-
-.terminal-line.success {
-  color: #67C23A;
-}
-
-.terminal-line.warning {
-  color: #E6A23C;
-}
-
-.terminal-line.error {
-  color: #F56C6C;
-}
-
-.timestamp {
-  color: #b0bec5;
-  min-width: 60px;
-}
-
-.level {
-  color: #909399;
-  min-width: 60px;
+  font-size: 1.1rem;
   font-weight: 600;
 }
 
-.message {
+.log-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.log-actions .el-button {
+  border-radius: 6px;
+  font-size: 0.85rem;
+  padding: 6px 12px;
+}
+
+.logs-container {
   flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-family: 'Courier New', 'Monaco', monospace;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 320px;
+}
+
+.log-item {
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
+}
+
+.log-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.log-item.info {
+  color: #409EFF;
+  border-left-color: #409EFF;
+}
+
+.log-item.success {
+  color: #67C23A;
+  border-left-color: #67C23A;
+}
+
+.log-item.warning {
+  color: #E6A23C;
+  border-left-color: #E6A23C;
+}
+
+.log-item.error {
+  color: #F56C6C;
+  border-left-color: #F56C6C;
+}
+
+.log-timestamp {
+  color: #b0bec5;
+  min-width: 80px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.log-message {
+  flex: 1;
+  word-break: break-word;
+}
+
+.no-logs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #b0bec5;
+  font-size: 0.9rem;
+  gap: 10px;
+}
+
+.no-logs .el-icon {
+  font-size: 2rem;
+  opacity: 0.5;
 }
 
 /* 底部控制栏 */
 .bottom-control-bar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 30px;
+  gap: 30px;
+  padding: 30px 35px;
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+  height: 500px;
+  min-height: 500px;
 }
 
 .control-group {
@@ -3134,8 +3208,116 @@ onBeforeUnmount(() => {
 }
 
 .performance-indicators {
+  flex: 1;
   display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+  padding: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  min-height: 420px;
+}
+
+.performance-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.performance-header h4 {
+  margin: 0;
+  color: #409EFF;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.performance-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.performance-actions .el-button {
+  border-radius: 6px;
+  font-size: 0.85rem;
+  padding: 6px 12px;
+}
+
+.indicators-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
+  flex: 1;
+}
+
+.indicator-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 25px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  min-height: 160px;
+  justify-content: center;
+}
+
+.indicator-card:hover {
+  background: rgba(64, 158, 255, 0.1);
+  border-color: rgba(64, 158, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.indicator-icon {
+  font-size: 2.2rem;
+  margin-bottom: 8px;
+}
+
+.indicator-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.indicator-label {
+  font-size: 0.85rem;
+  color: #b0bec5;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.indicator-value {
+  font-size: 1.4rem;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.indicator-progress {
+  width: 100%;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #67C23A 0%, #E6A23C 70%, #F56C6C 100%);
+  transition: width 0.5s ease;
+  border-radius: 3px;
 }
 
 .indicator {
@@ -3180,12 +3362,15 @@ onBeforeUnmount(() => {
   
   .bottom-control-bar {
     flex-direction: column;
-    gap: 20px;
+    gap: 25px;
+    height: auto;
+    min-height: 600px;
+    padding: 25px 20px;
   }
   
-  .performance-indicators {
-    flex-direction: column;
-    gap: 10px;
+  .indicators-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
   }
 }
 
@@ -3715,5 +3900,86 @@ onBeforeUnmount(() => {
 .simulation-status {
   margin-top: 10px;
   text-align: right;
+}
+
+.performance-indicators {
+  display: flex;
+  gap: 20px;
+}
+
+.indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.progress-bar {
+  width: 80px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #67C23A 0%, #E6A23C 70%, #F56C6C 100%);
+  transition: width 0.5s ease;
+  border-radius: 3px;
+}
+
+.performance-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.performance-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.indicator-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.indicator-icon {
+  font-size: 1.5rem;
+  color: #409EFF;
+}
+
+.indicator-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.indicator-label {
+  font-size: 0.8rem;
+  color: #b0bec5;
+  font-weight: 500;
+}
+
+.indicator-value {
+  font-size: 1rem;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.indicator-progress {
+  width: 100%;
 }
 </style> 

@@ -310,12 +310,22 @@ class TrajectoryCollisionManager:
         self.current_imu = None
         self.lock = threading.Lock()
         
+        # 连接全局帧缓存
+        try:
+            from .global_frame_cache import get_global_frame_cache
+            self.global_frame_cache = get_global_frame_cache()
+            print("✅ 轨迹碰撞管理器已连接到全局帧缓存")
+        except Exception as e:
+            print(f"⚠️ 轨迹碰撞管理器连接全局帧缓存失败: {e}")
+            self.global_frame_cache = None
+        
         # 尝试加载YOLO模型
         try:
             self.yolo_model = YOLO('utils/yolov8l-seg.pt')
-            print("YOLO模型加载成功")
+            print("✅ 轨迹碰撞管理器YOLO模型加载成功")
         except Exception as e:
-            print(f"YOLO模型加载失败: {e}")
+            print(f"❌ 轨迹碰撞管理器YOLO模型加载失败: {e}")
+            self.yolo_model = None
     
     def start(self):
         """启动服务"""
@@ -362,28 +372,48 @@ class TrajectoryCollisionManager:
             traceback.print_exc()
     
     def _processing_loop(self):
-        """处理循环"""
+        """处理循环 - 直接从全局帧缓存获取数据"""
+        print("🚀 轨迹碰撞管理器处理循环启动")
+        
         while self.is_running:
             try:
-                # 获取当前帧数据
-                with self.lock:
-                    if self.current_frame is None or self.current_depth is None:
-                        time.sleep(0.1)
-                        continue
+                frame = None
+                depth = None
+                
+                # 优先从全局帧缓存获取数据
+                if self.global_frame_cache:
+                    frame_data = self.global_frame_cache.get_current_frames(['color', 'depth'])
+                    frame = frame_data.get('color')
+                    depth = frame_data.get('depth')
                     
-                    frame = self.current_frame.copy()
-                    depth = self.current_depth.copy()
-                    imu = self.current_imu
+                    if frame is not None and depth is not None:
+                        print(f"📡 从全局帧缓存获取数据: frame={frame.shape}, depth={depth.shape}")
+                    else:
+                        print("⚠️ 全局帧缓存中无有效数据")
+                
+                # 如果全局帧缓存无数据，回退到本地缓存
+                if frame is None or depth is None:
+                    with self.lock:
+                        if self.current_frame is None or self.current_depth is None:
+                            time.sleep(0.1)
+                            continue
+                        
+                        frame = self.current_frame.copy()
+                        depth = self.current_depth.copy()
+                        print("📡 使用本地缓存数据")
                 
                 # 处理帧
-                self._process_frame(frame, depth, imu)
+                if frame is not None and depth is not None:
+                    self._process_frame(frame, depth, None)
                 
                 # 控制处理频率
-                time.sleep(0.05)  # 20 FPS
+                time.sleep(0.1)  # 10 FPS，降低频率避免资源竞争
                 
             except Exception as e:
-                print(f"处理帧时出错: {e}")
-                time.sleep(0.1)
+                print(f"❌ 轨迹碰撞管理器处理帧时出错: {e}")
+                import traceback
+                traceback.print_exc()
+                time.sleep(0.5)
     
     def _process_frame(self, frame: np.ndarray, depth: np.ndarray, imu_data: Any):
         """处理单帧数据"""

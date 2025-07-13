@@ -1774,7 +1774,8 @@ def health_check():
             'audio_manager': audio_manager is not None,
             'speech_processor': speech_processor is not None,
             'navigation_service': navigation_service is not None,
-            'trajectory_collision_manager': trajectory_collision_manager is not None
+            'trajectory_collision_manager': trajectory_collision_manager is not None,
+            'signal_user_inference': signal_user_inference is not None
         }
     }
     return jsonify(status)
@@ -2060,71 +2061,224 @@ def get_trajectory_status():
 
 @app.route('/api/collision/risk', methods=['GET'])
 def get_collision_risk():
-    """获取碰撞风险"""
+    """获取碰撞风险 - 使用真实的轨迹碰撞管理器数据"""
+    
+    # 确保time模块被导入
+    import time
     
     def safe_time_to_collision(time_val):
         """安全处理time_to_collision值，将Infinity转换为null"""
-        if time_val == float('inf') or time_val == float('-inf') or time_val != time_val:  # 检查NaN
+        if time_val is None:
             return None
-        return time_val
+        try:
+            if time_val == float('inf') or time_val == float('-inf') or time_val != time_val:  # 检查NaN
+                return None
+            return float(time_val)
+        except (ValueError, TypeError):
+            return None
     
     try:
-        # 如果轨迹碰撞管理器不可用，返回默认值
+        # 首先检查轨迹碰撞管理器是否可用
         if not trajectory_collision_manager:
+            print("❌ 轨迹碰撞管理器不可用")
             return jsonify({
-                'success': True,
+                'success': False,
+                'error': '轨迹碰撞管理器不可用',
+                'detected_objects': [],
                 'max_probability': 0.0,
                 'risk': {
                     'level': 'low',
                     'probability': 0.0,
-                    'time_to_collision': None,  # 使用null而不是Infinity
-                    'warning_message': '碰撞预警服务未启动',
+                    'time_to_collision': None,
+                    'warning_message': '碰撞检测系统不可用',
                     'nearest_object': None
                 },
-                'tracks': {},
-                'detected_objects': []
-            })
+                'tracks': {}
+            }), 503
         
-        # 获取碰撞数据
-        collision_data = trajectory_collision_manager.get_collision_data()
+        # 检查轨迹碰撞管理器是否正在运行
+        if not trajectory_collision_manager.is_running:
+            print("⚠️ 轨迹碰撞管理器未运行，尝试启动...")
+            
+            # 尝试启动轨迹碰撞管理器
+            try:
+                trajectory_collision_manager.start()
+                print("✅ 轨迹碰撞管理器启动成功")
+                
+                # 等待一小段时间让系统稳定
+                time.sleep(0.5)
+                
+            except Exception as start_error:
+                print(f"❌ 轨迹碰撞管理器启动失败: {start_error}")
+                return jsonify({
+                    'success': False,
+                    'error': f'轨迹碰撞管理器启动失败: {str(start_error)}',
+                    'detected_objects': [],
+                    'max_probability': 0.0,
+                    'risk': {
+                        'level': 'low',
+                        'probability': 0.0,
+                        'time_to_collision': None,
+                        'warning_message': '碰撞检测系统启动失败',
+                        'nearest_object': None
+                    },
+                    'tracks': {}
+                }), 503
         
-        # 获取风险信息
-        risk = trajectory_collision_manager.collision_warning.get_collision_risk()
+        print("📊 从轨迹碰撞管理器获取真实碰撞数据...")
         
+        # 安全获取碰撞数据
+        collision_data = {}
+        try:
+            if hasattr(trajectory_collision_manager, 'get_collision_data'):
+                collision_data = trajectory_collision_manager.get_collision_data()
+            else:
+                print("⚠️ 轨迹碰撞管理器缺少get_collision_data方法")
+                collision_data = {'max_probability': 0.0, 'tracks': {}}
+        except Exception as data_error:
+            print(f"⚠️ 获取碰撞数据失败: {data_error}")
+            collision_data = {'max_probability': 0.0, 'tracks': {}}
+        
+        # 安全获取风险信息
+        risk = None
+        try:
+            if hasattr(trajectory_collision_manager, 'collision_warning') and trajectory_collision_manager.collision_warning:
+                risk = trajectory_collision_manager.collision_warning.get_collision_risk()
+            else:
+                print("⚠️ 轨迹碰撞管理器缺少collision_warning属性")
+        except Exception as risk_error:
+            print(f"⚠️ 获取风险信息失败: {risk_error}")
+            risk = None
+        
+        # 如果没有获取到风险信息，创建默认风险信息
+        if risk is None:
+            from utils.trajectory_collision_manager import CollisionRisk
+            risk = CollisionRisk(
+                level='low',
+                probability=0.0,
+                time_to_collision=float('inf'),
+                warning_message='数据获取失败',
+                nearest_object=None
+            )
+        
+        # 安全获取检测到的对象
+        detected_objects = []
+        try:
+            if hasattr(trajectory_collision_manager, 'collision_warning') and trajectory_collision_manager.collision_warning:
+                detected_objects = trajectory_collision_manager.collision_warning.get_detected_objects()
+            else:
+                print("⚠️ 无法获取检测到的对象")
+        except Exception as obj_error:
+            print(f"⚠️ 获取检测对象失败: {obj_error}")
+            detected_objects = []
+        
+        # 转换检测到的对象为API格式
+        api_detected_objects = []
+        for obj in detected_objects:
+            try:
+                api_detected_objects.append({
+                    'id': getattr(obj, 'id', 0),
+                    'type': getattr(obj, 'type', 'unknown'),
+                    'distance': getattr(obj, 'distance', 0.0),
+                    'position': list(getattr(obj, 'position', [0.0, 0.0, 0.0])),
+                    'velocity': list(getattr(obj, 'velocity', [0.0, 0.0, 0.0])),
+                    'confidence': getattr(obj, 'confidence', 0.0),
+                    'timestamp': getattr(obj, 'timestamp', time.time())
+                })
+            except Exception as obj_convert_error:
+                print(f"⚠️ 转换检测对象失败: {obj_convert_error}")
+                continue
+        
+        # 计算最大碰撞概率
+        max_probability = collision_data.get('max_probability', 0.0)
+        
+        # 如果没有检测到任何碰撞风险，使用轨迹数据计算
+        if max_probability == 0.0 and collision_data.get('tracks'):
+            tracks = collision_data['tracks']
+            if tracks:
+                # 从轨迹数据中找到最大碰撞概率
+                track_probabilities = []
+                for track_id, track_data in tracks.items():
+                    if isinstance(track_data, dict) and 'collision_probability' in track_data:
+                        track_probabilities.append(track_data['collision_probability'])
+                
+                if track_probabilities:
+                    max_probability = max(track_probabilities)
+                    print(f"📈 从轨迹数据计算得到最大碰撞概率: {max_probability:.3f}")
+        
+        # 构建最近物体信息
+        nearest_object = None
+        try:
+            if hasattr(risk, 'nearest_object') and risk.nearest_object:
+                nearest_object = {
+                    'type': getattr(risk.nearest_object, 'type', 'unknown'),
+                    'distance': getattr(risk.nearest_object, 'distance', 0.0),
+                    'position': list(getattr(risk.nearest_object, 'position', [0.0, 0.0, 0.0])),
+                    'confidence': getattr(risk.nearest_object, 'confidence', 0.0)
+                }
+            elif api_detected_objects:
+                # 如果risk中没有nearest_object，从检测到的对象中找最近的
+                nearest_obj = min(api_detected_objects, key=lambda obj: obj['distance'])
+                nearest_object = {
+                    'type': nearest_obj['type'],
+                    'distance': nearest_obj['distance'],
+                    'position': nearest_obj['position'],
+                    'confidence': nearest_obj['confidence']
+                }
+        except Exception as nearest_error:
+            print(f"⚠️ 构建最近物体信息失败: {nearest_error}")
+            nearest_object = None
+        
+        print(f"💥 轨迹碰撞管理器返回数据: max_prob={max_probability:.3f}, risk_level={getattr(risk, 'level', 'unknown')}")
+        print(f"📋 检测到的对象数量: {len(api_detected_objects)}")
+        print(f"🎯 最近物体: {nearest_object['type'] if nearest_object else 'None'}")
+        
+        # 安全获取风险属性
+        risk_level = getattr(risk, 'level', 'low')
+        risk_probability = getattr(risk, 'probability', 0.0)
+        risk_time_to_collision = getattr(risk, 'time_to_collision', float('inf'))
+        risk_warning_message = getattr(risk, 'warning_message', '未知状态')
+        
+        # 返回真实数据
         return jsonify({
             'success': True,
-            'max_probability': collision_data['max_probability'] * 100,  # 转换为百分比
+            'max_probability': max_probability * 100,  # 转换为百分比
             'risk': {
-                'level': risk.level,
-                'probability': risk.probability * 100,  # 转换为百分比
-                'time_to_collision': safe_time_to_collision(risk.time_to_collision),
-                'warning_message': risk.warning_message,
-                'nearest_object': {
-                    'type': risk.nearest_object.type,
-                    'distance': risk.nearest_object.distance,
-                    'position': risk.nearest_object.position,
-                    'confidence': risk.nearest_object.confidence
-                } if risk.nearest_object else None
+                'level': risk_level,
+                'probability': risk_probability * 100,  # 转换为百分比
+                'time_to_collision': safe_time_to_collision(risk_time_to_collision),
+                'warning_message': risk_warning_message,
+                'nearest_object': nearest_object
             },
-            'tracks': collision_data['tracks'],
-            'detected_objects': collision_data['detected_objects']
+            'tracks': collision_data.get('tracks', {}),
+            'detected_objects': api_detected_objects,
+            'is_mock': False,
+            'timestamp': time.time()
         })
+        
     except Exception as e:
-        print(f"获取碰撞风险时出错: {e}")
-        # 发生错误时返回默认值，而不是500错误
+        print(f"❌ 获取碰撞风险时出错: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # 发生错误时返回错误信息，不使用模拟数据
         return jsonify({
-            'success': True,
+            'success': False,
+            'error': f'获取碰撞风险失败: {str(e)}',
+            'detected_objects': [],
             'max_probability': 0.0,
             'risk': {
                 'level': 'low',
                 'probability': 0.0,
-                'time_to_collision': None,  # 使用null而不是Infinity
-                'warning_message': '碰撞检测暂时不可用',
+                'time_to_collision': None,
+                'warning_message': '碰撞检测系统错误',
                 'nearest_object': None
             },
             'tracks': {},
-            'detected_objects': []
-        })
+            'is_mock': False,
+            'error_fallback': True,
+            'timestamp': time.time()
+        }), 500
 
 @app.route('/api/collision/objects', methods=['GET'])
 def get_detected_objects():
@@ -2419,6 +2573,13 @@ try:
     else:
         print(f"⚠️ 连接失败: 环境处理器={environment_processor is not None}, 全局缓存={global_frame_cache is not None}")
     
+    # 连接轨迹碰撞管理器
+    if environment_processor and trajectory_collision_manager:
+        environment_processor.set_trajectory_collision_manager(trajectory_collision_manager)
+        print("✅ 环境感知处理器已连接到轨迹碰撞管理器")
+    else:
+        print(f"⚠️ 连接失败: 环境处理器={environment_processor is not None}, 轨迹碰撞管理器={trajectory_collision_manager is not None}")
+    
     print("✅ 环境感知处理器导入成功")
 except Exception as e:
     print(f"❌ 导入环境感知处理器失败: {e}")
@@ -2432,6 +2593,393 @@ if device_manager and global_frame_cache:
     # 设备管理器已经在初始化时连接了全局帧缓存
 else:
     print("⚠️ 设备管理器或全局帧缓存不可用")
+
+# ========== 用户行为识别API ==========
+
+@app.route('/api/signal/predict', methods=['POST'])
+def predict_user_behavior():
+    """
+    用户行为识别预测API
+    """
+    try:
+        if not signal_inference_available or not signal_user_inference:
+            return jsonify({
+                'success': False,
+                'error': '用户行为识别服务不可用'
+            }), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': '缺少输入数据'
+            }), 400
+        
+        # 进行预测
+        result = signal_user_inference.predict(data)
+        
+        return jsonify({
+            'success': True,
+            'prediction': result,
+            'timestamp': time.time()
+        })
+        
+    except Exception as e:
+        logger.error(f"用户行为识别预测失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'预测失败: {str(e)}'
+        }), 500
+
+@app.route('/api/signal/mock_predict', methods=['POST'])
+def mock_predict_user_behavior():
+    """
+    用户行为识别模拟预测API - 生成实时模拟数据（固定为静止状态）
+    """
+    try:
+        import random
+        import numpy as np
+        
+        # 行为类型列表，对应训练模型中的8个类别
+        behavior_types = [
+            'stationary',  # 静止
+            'walking',     # 走路
+            'running',     # 跑步
+            'cycling',     # 自行车
+            'driving',     # 汽车
+            'bus',         # 公交
+            'train',       # 火车
+            'subway'       # 地铁
+        ]
+        
+        # 固定为静止状态
+        predicted_behavior = 'stationary'
+        
+        # 为静止状态生成实时变化的置信度（在高置信度范围内波动）
+        base_confidence = 0.92  # 基础置信度
+        confidence_variation = random.uniform(-0.05, 0.05)  # ±5% 的波动
+        confidence = max(0.85, min(0.98, base_confidence + confidence_variation))
+        
+        # 生成模拟的传感器特征（符合静止状态的特征）
+        sensor_features = {
+            'acceleration': {
+                'x': random.uniform(-0.1, 0.1),  # 静止时加速度接近0
+                'y': random.uniform(-0.1, 0.1),
+                'z': random.uniform(9.7, 9.9)    # 重力加速度
+            },
+            'gyroscope': {
+                'x': random.uniform(-0.05, 0.05),  # 静止时陀螺仪数值很小
+                'y': random.uniform(-0.05, 0.05),
+                'z': random.uniform(-0.05, 0.05)
+            },
+            'gps_accuracy': random.uniform(3, 8),     # 较好的GPS精度
+            'signal_strength': random.uniform(-65, -45)  # 较强的信号
+        }
+        
+        # 为静止状态生成概率分布（静止概率最高，其他很低）
+        other_behaviors_prob = 1 - confidence
+        num_other_behaviors = len(behavior_types) - 1
+        avg_other_prob = other_behaviors_prob / num_other_behaviors
+        
+        probabilities = {}
+        for behavior in behavior_types:
+            if behavior == 'stationary':
+                probabilities[behavior] = confidence
+            else:
+                # 为其他行为分配小的随机概率
+                variation = random.uniform(-0.5, 0.5) * avg_other_prob
+                probabilities[behavior] = max(0.001, avg_other_prob + variation)
+        
+        # 确保概率总和为1
+        total_prob = sum(probabilities.values())
+        probabilities = {k: v / total_prob for k, v in probabilities.items()}
+        
+        # 模拟预测结果
+        prediction_result = {
+            'predicted_class': predicted_behavior,
+            'predicted_class_index': behavior_types.index(predicted_behavior),
+            'confidence': confidence,
+            'probabilities': probabilities,
+            'sensor_features': sensor_features,
+            'timestamp': time.time(),
+            'model_version': '1.0.0',
+            'processing_time_ms': random.uniform(15, 35),  # 静止状态处理较快
+            'behavior_duration': random.uniform(30, 120),  # 静止持续时间
+            'movement_detected': False,  # 无运动检测
+            'stability_score': random.uniform(0.9, 1.0)  # 高稳定性分数
+        }
+        
+        return jsonify({
+            'success': True,
+            'prediction': prediction_result,
+            'timestamp': time.time(),
+            'is_mock': True,
+            'behavior_fixed': 'stationary',
+            'message': '模拟数据生成成功 - 固定静止状态'
+        })
+        
+    except Exception as e:
+        logger.error(f"模拟用户行为识别失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'模拟预测失败: {str(e)}',
+            'timestamp': time.time()
+        }), 500
+
+@app.route('/api/signal/predict_batch', methods=['POST'])
+def predict_user_behavior_batch():
+    """
+    批量用户行为识别预测API
+    """
+    try:
+        if not signal_inference_available or not signal_user_inference:
+            return jsonify({
+                'success': False,
+                'error': '用户行为识别服务不可用'
+            }), 500
+        
+        data = request.get_json()
+        if not data or 'data_list' not in data:
+            return jsonify({
+                'success': False,
+                'error': '缺少数据列表'
+            }), 400
+        
+        data_list = data['data_list']
+        if not isinstance(data_list, list):
+            return jsonify({
+                'success': False,
+                'error': '数据列表格式错误'
+            }), 400
+        
+        # 进行批量预测
+        results = signal_user_inference.predict_batch(data_list)
+        
+        return jsonify({
+            'success': True,
+            'predictions': results,
+            'count': len(results),
+            'timestamp': time.time()
+        })
+        
+    except Exception as e:
+        logger.error(f"批量用户行为识别预测失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'批量预测失败: {str(e)}'
+        }), 500
+
+@app.route('/api/signal/model_info', methods=['GET'])
+def get_signal_model_info():
+    """
+    获取用户行为识别模型信息
+    """
+    try:
+        if not signal_inference_available or not signal_user_inference:
+            return jsonify({
+                'success': False,
+                'error': '用户行为识别服务不可用'
+            }), 500
+        
+        model_info = signal_user_inference.get_model_info()
+        
+        return jsonify({
+            'success': True,
+            'model_info': model_info,
+            'timestamp': time.time()
+        })
+        
+    except Exception as e:
+        logger.error(f"获取模型信息失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'获取模型信息失败: {str(e)}'
+        }), 500
+
+@app.route('/api/signal/predict_from_csv', methods=['POST'])
+def predict_from_csv():
+    """
+    从CSV数据进行用户行为识别预测
+    """
+    try:
+        if not signal_inference_available or not signal_user_inference:
+            return jsonify({
+                'success': False,
+                'error': '用户行为识别服务不可用'
+            }), 500
+        
+        # 检查是否有文件上传
+        if 'file' in request.files:
+            file = request.files['file']
+            if file.filename == '':
+                return jsonify({
+                    'success': False,
+                    'error': '未选择文件'
+                }), 400
+            
+            if file and file.filename.endswith('.csv'):
+                # 读取CSV文件
+                import pandas as pd
+                from io import StringIO
+                
+                # 读取文件内容
+                csv_content = file.read().decode('utf-8')
+                df = pd.read_csv(StringIO(csv_content))
+                
+                # 进行预测
+                result = signal_user_inference.predict(df)
+                
+                return jsonify({
+                    'success': True,
+                    'prediction': result,
+                    'data_shape': df.shape,
+                    'columns': df.columns.tolist(),
+                    'timestamp': time.time()
+                })
+        
+        # 如果没有文件，检查JSON数据
+        data = request.get_json()
+        if not data or 'csv_data' not in data:
+            return jsonify({
+                'success': False,
+                'error': '缺少CSV数据或文件'
+            }), 400
+        
+        # 从JSON中的CSV数据创建DataFrame
+        import pandas as pd
+        df = pd.DataFrame(data['csv_data'])
+        
+        # 进行预测
+        result = signal_user_inference.predict(df)
+        
+        return jsonify({
+            'success': True,
+            'prediction': result,
+            'data_shape': df.shape,
+            'columns': df.columns.tolist(),
+            'timestamp': time.time()
+        })
+        
+    except Exception as e:
+        logger.error(f"CSV预测失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'CSV预测失败: {str(e)}'
+        }), 500
+
+@app.route('/api/signal/predict_from_gps', methods=['POST'])
+def predict_from_gps_data():
+    """
+    从GPS数据文件进行用户行为识别预测
+    """
+    try:
+        if not signal_inference_available or not signal_user_inference:
+            return jsonify({
+                'success': False,
+                'error': '用户行为识别服务不可用'
+            }), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': '缺少输入数据'
+            }), 400
+        
+        # 模拟GPS数据格式转换
+        if 'gps_data' in data:
+            gps_data = data['gps_data']
+            
+            # 创建模拟的传感器数据
+            import pandas as pd
+            import numpy as np
+            
+            # 根据GPS数据创建模拟的传感器数据
+            num_samples = len(gps_data) if isinstance(gps_data, list) else 60
+            
+            # 创建模拟数据
+            mock_data = {
+                'cell_id': np.random.randint(0, 100, num_samples),
+                'gps_id': np.random.randint(0, 30, num_samples),
+                'wifi_id': np.random.randint(0, 50, num_samples),
+                'cell_num': np.random.randint(1, 10, num_samples),
+                'dBm': np.random.uniform(-100, -50, num_samples),
+                'gps_num': np.random.randint(1, 15, num_samples),
+                'Latitude': np.random.uniform(31.8, 31.9, num_samples),
+                'Longitude': np.random.uniform(117.2, 117.3, num_samples),
+                'Altitude': np.random.uniform(10, 100, num_samples),
+                'wifi_num': np.random.randint(1, 20, num_samples),
+                'SNR': np.random.uniform(0, 30, num_samples),
+                'RSSI': np.random.uniform(-80, -30, num_samples),
+                'Acc_x': np.random.uniform(-2, 2, num_samples),
+                'Acc_y': np.random.uniform(-2, 2, num_samples),
+                'Acc_z': np.random.uniform(8, 12, num_samples),
+                'Gyr_x': np.random.uniform(-1, 1, num_samples),
+                'Gyr_y': np.random.uniform(-1, 1, num_samples),
+                'Gyr_z': np.random.uniform(-1, 1, num_samples),
+                'Mag_x': np.random.uniform(-50, 50, num_samples),
+                'Mag_y': np.random.uniform(-50, 50, num_samples),
+                'Mag_z': np.random.uniform(-50, 50, num_samples),
+                'Ori_w': np.random.uniform(-1, 1, num_samples),
+                'Ori_x': np.random.uniform(-1, 1, num_samples),
+                'Ori_y': np.random.uniform(-1, 1, num_samples),
+                'Ori_z': np.random.uniform(-1, 1, num_samples),
+                'LAcc_x': np.random.uniform(-2, 2, num_samples),
+                'LAcc_y': np.random.uniform(-2, 2, num_samples),
+                'LAcc_z': np.random.uniform(-2, 2, num_samples),
+                'Pressure': np.random.uniform(1000, 1020, num_samples)
+            }
+            
+            df = pd.DataFrame(mock_data)
+            
+            # 进行预测
+            result = signal_user_inference.predict(df)
+            
+            return jsonify({
+                'success': True,
+                'prediction': result,
+                'note': '基于GPS数据生成的模拟传感器数据进行预测',
+                'data_shape': df.shape,
+                'timestamp': time.time()
+            })
+        
+        return jsonify({
+            'success': False,
+            'error': '未找到GPS数据'
+        }), 400
+        
+    except Exception as e:
+        logger.error(f"GPS数据预测失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'GPS数据预测失败: {str(e)}'
+        }), 500
+
+@app.route('/api/signal/status', methods=['GET'])
+def get_signal_inference_status():
+    """
+    获取用户行为识别服务状态
+    """
+    try:
+        status = {
+            'available': signal_inference_available,
+            'model_loaded': signal_user_inference.model is not None if signal_user_inference else False,
+            'model_path': signal_user_inference.model_path if signal_user_inference else None,
+            'labels': signal_user_inference.labels if signal_user_inference else [],
+            'timestamp': time.time()
+        }
+        
+        return jsonify({
+            'success': True,
+            'status': status
+        })
+        
+    except Exception as e:
+        logger.error(f"获取用户行为识别状态失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'获取状态失败: {str(e)}'
+        }), 500
 
 # ========== 新增的环境感知API ==========
 
@@ -2583,6 +3131,164 @@ def api_device_status():
     except Exception as e:
         logger.error(f"获取设备管理器状态错误: {e}")
         return jsonify({"success": False, "error": str(e)})
+
+# 导入用户行为识别推理模块
+try:
+    from utils.signal_user_inference import get_signal_user_inference
+    signal_user_inference = get_signal_user_inference()
+    signal_inference_available = True
+    print("用户行为识别推理模块导入成功")
+except Exception as e:
+    print(f"导入用户行为识别推理模块失败: {e}")
+    signal_user_inference = None
+    signal_inference_available = False
+
+# 导入轨迹追踪和碰撞预警管理器
+try:
+    from utils.trajectory_collision_manager import trajectory_collision_manager
+    print("轨迹追踪和碰撞预警管理器导入成功")
+except Exception as e:
+    print(f"导入轨迹追踪和碰撞预警管理器失败: {e}")
+    trajectory_collision_manager = None
+
+@app.route('/api/collision/start_system', methods=['POST'])
+def start_collision_system():
+    """启动完整的碰撞检测系统"""
+    try:
+        print("🚀 启动完整的碰撞检测系统...")
+        
+        # 1. 首先启动设备管理器
+        if device_manager and not device_manager.is_running():
+            print("📷 启动设备管理器...")
+            device_success = device_manager.start()
+            if not device_success:
+                return jsonify({
+                    'success': False,
+                    'error': '设备管理器启动失败，无法获取摄像头数据'
+                }), 500
+            
+            # 等待设备稳定
+            time.sleep(2)
+            print("✅ 设备管理器启动成功")
+        else:
+            print("📷 设备管理器已在运行")
+        
+        # 2. 启动轨迹碰撞管理器
+        if trajectory_collision_manager and not trajectory_collision_manager.is_running:
+            print("🎯 启动轨迹碰撞管理器...")
+            trajectory_collision_manager.start()
+            
+            # 等待轨迹碰撞管理器稳定
+            time.sleep(1)
+            print("✅ 轨迹碰撞管理器启动成功")
+        else:
+            print("🎯 轨迹碰撞管理器已在运行")
+        
+        # 3. 验证系统状态
+        system_status = {
+            'device_manager': device_manager.is_running() if device_manager else False,
+            'trajectory_collision_manager': trajectory_collision_manager.is_running if trajectory_collision_manager else False,
+            'yolo_model_loaded': trajectory_collision_manager.yolo_model is not None if trajectory_collision_manager else False,
+            'global_frame_cache': trajectory_collision_manager.global_frame_cache is not None if trajectory_collision_manager else False
+        }
+        
+        all_systems_running = all(system_status.values())
+        
+        return jsonify({
+            'success': all_systems_running,
+            'message': '碰撞检测系统启动完成' if all_systems_running else '碰撞检测系统部分启动失败',
+            'system_status': system_status,
+            'timestamp': time.time()
+        })
+        
+    except Exception as e:
+        print(f"❌ 启动碰撞检测系统时出错: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f'启动碰撞检测系统失败: {str(e)}'
+        }), 500
+
+@app.route('/api/collision/stop_system', methods=['POST'])
+def stop_collision_system():
+    """停止完整的碰撞检测系统"""
+    try:
+        print("🛑 停止完整的碰撞检测系统...")
+        
+        # 1. 停止轨迹碰撞管理器
+        if trajectory_collision_manager and trajectory_collision_manager.is_running:
+            print("🎯 停止轨迹碰撞管理器...")
+            trajectory_collision_manager.stop()
+            print("✅ 轨迹碰撞管理器已停止")
+        
+        # 2. 停止设备管理器
+        if device_manager and device_manager.is_running():
+            print("📷 停止设备管理器...")
+            device_manager.stop()
+            print("✅ 设备管理器已停止")
+        
+        return jsonify({
+            'success': True,
+            'message': '碰撞检测系统已停止',
+            'timestamp': time.time()
+        })
+        
+    except Exception as e:
+        print(f"❌ 停止碰撞检测系统时出错: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'停止碰撞检测系统失败: {str(e)}'
+        }), 500
+
+@app.route('/api/collision/system_status', methods=['GET'])
+def get_collision_system_status():
+    """获取碰撞检测系统状态"""
+    try:
+        # 检查各个组件状态
+        device_status = {
+            'available': device_manager is not None,
+            'running': device_manager.is_running() if device_manager else False,
+            'latest_data': bool(device_manager.get_latest_data().get('color') is not None) if device_manager and device_manager.is_running() else False
+        }
+        
+        trajectory_status = {
+            'available': trajectory_collision_manager is not None,
+            'running': trajectory_collision_manager.is_running if trajectory_collision_manager else False,
+            'yolo_model_loaded': trajectory_collision_manager.yolo_model is not None if trajectory_collision_manager else False,
+            'global_frame_cache_connected': trajectory_collision_manager.global_frame_cache is not None if trajectory_collision_manager else False
+        }
+        
+        global_cache_status = {
+            'available': global_frame_cache is not None,
+            'has_data': bool(global_frame_cache.get_current_frames(['color']).get('color') is not None) if global_frame_cache else False
+        }
+        
+        # 计算整体系统健康状态
+        system_healthy = (
+            device_status['running'] and 
+            trajectory_status['running'] and 
+            trajectory_status['yolo_model_loaded'] and
+            global_cache_status['has_data']
+        )
+        
+        return jsonify({
+            'success': True,
+            'system_healthy': system_healthy,
+            'components': {
+                'device_manager': device_status,
+                'trajectory_collision_manager': trajectory_status,
+                'global_frame_cache': global_cache_status
+            },
+            'timestamp': time.time()
+        })
+        
+    except Exception as e:
+        print(f"❌ 获取碰撞检测系统状态时出错: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'获取系统状态失败: {str(e)}'
+        }), 500
 
 if __name__ == '__main__':
     import sys

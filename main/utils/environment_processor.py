@@ -52,6 +52,9 @@ class EnvironmentProcessor:
         self.latest_result = None
         self.result_lock = threading.Lock()
         
+        # 轨迹碰撞管理器连接
+        self.trajectory_collision_manager = None
+        
         # YOLO模型（如果可用）
         self.yolo_model = None
         if YOLO_AVAILABLE:
@@ -76,6 +79,11 @@ class EnvironmentProcessor:
         self.global_frame_cache = global_frame_cache
         print("🔗 环境处理器已连接到全局帧缓存")
     
+    def set_trajectory_collision_manager(self, manager):
+        """设置轨迹碰撞管理器"""
+        self.trajectory_collision_manager = manager
+        print("🔗 环境处理器已连接到轨迹碰撞管理器")
+    
     def start_processing(self):
         """启动处理"""
         if self.is_processing:
@@ -84,6 +92,13 @@ class EnvironmentProcessor:
         
         self.is_processing = True
         self.stop_event.clear()
+        
+        # 启动轨迹碰撞管理器（如果已连接）
+        # 注释掉自动启动，避免与独立启动的轨迹碰撞管理器冲突
+        # if self.trajectory_collision_manager and not self.trajectory_collision_manager.is_running:
+        #     print("🚀 启动轨迹碰撞管理器...")
+        #     self.trajectory_collision_manager.start()
+        print("⚠️ 环境感知处理器不再自动启动轨迹碰撞管理器，避免数据竞争")
         
         self.processing_thread = threading.Thread(target=self.continuous_processing, daemon=True)
         self.processing_thread.start()
@@ -118,6 +133,27 @@ class EnvironmentProcessor:
                 if rgb_image is not None:
                     # 处理帧
                     result = self.process_frame(rgb_image)
+                    
+                    # 注释掉向轨迹碰撞管理器传递帧数据的逻辑，避免数据竞争
+                    # 轨迹碰撞管理器应该直接从全局帧缓存获取数据
+                    # if self.trajectory_collision_manager and self.trajectory_collision_manager.is_running:
+                    #     # 尝试从全局帧缓存获取深度数据
+                    #     depth_data = None
+                    #     if self.global_frame_cache:
+                    #         frame_data = self.global_frame_cache.get_latest_data()
+                    #         if frame_data:
+                    #             depth_data = frame_data.get('depth')
+                    #     
+                    #     # 如果没有深度数据，创建模拟深度数据
+                    #     if depth_data is None:
+                    #         import numpy as np
+                    #         depth_data = np.ones((rgb_image.shape[0], rgb_image.shape[1]), dtype=np.uint16) * 1000
+                    #     
+                    #     print("📡 向轨迹碰撞管理器传递帧数据...")
+                    #     self.trajectory_collision_manager.update_frame_data(
+                    #         rgb_image, depth_data, None
+                    #     )
+                    print("🔄 环境感知处理器独立处理，不干扰轨迹碰撞管理器")
                     
                     # 更新统计信息
                     processing_time = time.time() - start_time
