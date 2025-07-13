@@ -37,8 +37,8 @@ const simulatorControls = reactive({
   },
   isCustomLocation: false,
   customLocation: {
-    lat: 31.774134,
-    lng: 117.208162
+    lat: 31.841395,   // 合肥工业大学翡翠湖校区11号宿舍楼纬度
+    lng: 117.263228   // 合肥工业大学翡翠湖校区11号宿舍楼经度
   }
 })
 
@@ -66,8 +66,8 @@ const loadCurrentLocation = async () => {
       // 如果没有成功获取位置，使用默认位置
       if (!currentLocation.value) {
         currentLocation.value = {
-          lat: 31.774134,
-          lng: 117.208162,
+          lat: 31.841395,   // 合肥工业大学翡翠湖校区11号宿舍楼纬度
+          lng: 117.263228,  // 合肥工业大学翡翠湖校区11号宿舍楼经度
           timestamp: Date.now() / 1000
         }
       }
@@ -79,8 +79,8 @@ const loadCurrentLocation = async () => {
     // 如果没有成功获取位置，使用默认位置
     if (!currentLocation.value) {
       currentLocation.value = {
-        lat: 31.774134,
-        lng: 117.208162,
+        lat: 31.841395,   // 合肥工业大学翡翠湖校区11号宿舍楼纬度
+        lng: 117.263228,  // 合肥工业大学翡翠湖校区11号宿舍楼经度
         timestamp: Date.now() / 1000
       }
     }
@@ -211,8 +211,8 @@ const initMap = () => {
       // 启用建筑物和POI
       features: ['bg', 'road', 'building', 'point'],
       viewMode: '3D', // 使用3D视图可以更好地显示建筑物
-      // 设置默认中心点为新的位置坐标
-      center: [117.208162, 31.774134]
+      // 设置默认中心点为合肥工业大学翡翠湖校区11号宿舍楼
+      center: [117.263228, 31.841395]
     })
     
     // 地图加载完成事件
@@ -384,8 +384,8 @@ const deleteLocationRecord = async (locationId) => {
 // 创建一条默认位置记录
 const createDefaultLocationRecord = async () => {
   try {
-    // 使用新的默认坐标
-    const response = await locationApi.addLocation(31.774134, 117.208162)
+    // 使用合肥工业大学翡翠湖校区11号宿舍楼坐标
+    const response = await locationApi.addLocation(31.841395, 117.263228)
     
     if (response.data.code === 200) {
       ElMessage.success('已创建默认位置记录')

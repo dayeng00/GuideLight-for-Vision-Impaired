@@ -57,7 +57,25 @@ export const videoApi = {
   getVideoStreamUrl: (cameraType: string, side?: string) => {
     const baseUrl = `${API_BASE_URL}/${cameraType}/video_feed`
     return side ? `${baseUrl}_${side}` : baseUrl
-  }
+  },
+  
+  // 新增：获取视频流状态
+  getStreamsStatus: () => 
+    apiClient.get('/api/video_streams/status'),
+  
+  // 新增：获取帧缓存状态
+  getFrameCacheStatus: () => 
+    apiClient.get('/api/frame_cache/status'),
+  
+  // 新增：获取帧数据信息
+  getFrameInfo: (types?: string[]) => {
+    const params = types ? { types } : {}
+    return apiClient.get('/api/frame_cache/frames', { params })
+  },
+  
+  // 新增：清空帧缓存
+  clearFrameCache: () => 
+    apiClient.post('/api/frame_cache/clear')
 }
 
 // 位置相关API

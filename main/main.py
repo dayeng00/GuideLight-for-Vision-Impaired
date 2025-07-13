@@ -103,8 +103,8 @@ def create_threaded_video_stream(stream_id: str, source_func: Callable, response
                 frame_data = stream.get_frame(timeout=0.1)
                 
                 if frame_data is not None:
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+                    # 直接返回已编码的MJPEG数据，不再二次包装
+                    yield frame_data
                 else:
                     # 没有帧时短暂休眠
                     time.sleep(0.033)  # ~30fps
@@ -357,9 +357,9 @@ def get_location():
         else:
             # 如果没有位置记录，返回默认位置（合肥工业大学屯溪路校区）
             default_location = {
-                "name": "合肥工业大学",
-                "lng": 117.283042,  # 经度
-                "lat": 31.844786,   # 纬度
+                "name": "合肥工业大学翡翠湖校区11号宿舍楼",
+                "lng": 117.263228,  # 经度
+                "lat": 31.841395,   # 纬度
                 "timestamp": time.time()
             }
             return jsonify({
@@ -386,10 +386,10 @@ def get_current_location():
             db.create_all()
             print("数据库表创建完成")
             
-            # 添加一条默认记录
+            # 添加一条默认记录 - 合肥工业大学翡翠湖校区11号宿舍楼
             default_location = LocationData(
-                longitude=117.283042,
-                latitude=31.844786,
+                longitude=117.263228,
+                latitude=31.841395,
                 time=datetime.now()
             )
             db.session.add(default_location)
@@ -679,6 +679,7 @@ def d_feed():
     
     try:
         stream_id = f"d_estimator_{id(d_estimator)}"
+        # 直接返回create_threaded_video_stream的结果，不要再次包装
         return create_threaded_video_stream(stream_id, d_estimator.run)
     except Exception as e:
         logger.error(f"深度估计器视频流启动失败: {e}")
@@ -748,7 +749,8 @@ def f_d_feed_left():
     
     try:
         stream_id = f"f_detector_left_{id(f_detector)}"
-        return create_threaded_video_stream(stream_id, f_detector.show_left)
+        # 直接返回create_threaded_video_stream的结果，不要再次包装
+        return create_threaded_video_stream(stream_id, f_detector.run_left)
     except Exception as e:
         logger.error(f"左侧视频流启动失败: {e}")
         return jsonify({"error": str(e)}), 500
@@ -767,10 +769,17 @@ def f_d_feed_right():
     
     try:
         stream_id = f"f_detector_right_{id(f_detector)}"
-        return create_threaded_video_stream(stream_id, f_detector.show_right)
+        # 直接返回create_threaded_video_stream的结果，不要再次包装
+        return create_threaded_video_stream(stream_id, f_detector.run_right)
     except Exception as e:
         logger.error(f"右侧视频流启动失败: {e}")
         return jsonify({"error": str(e)}), 500
+
+# 为了兼容性，添加基础的 f_detector video_feed 路由
+@app.route('/f_detector/video_feed')
+def f_d_feed():
+    """特征点检测器基础视频流 - 默认返回左侧视频流"""
+    return f_d_feed_left()
 
 
 # f_tracker
@@ -832,6 +841,7 @@ def f_t_feed_left():
     
     try:
         stream_id = f"f_tracker_left_{id(f_tracker)}"
+        # 直接返回create_threaded_video_stream的结果，不要再次包装
         return create_threaded_video_stream(stream_id, f_tracker.show_left)
     except Exception as e:
         logger.error(f"f_tracker左侧视频流启动失败: {e}")
@@ -850,10 +860,17 @@ def f_t_feed_right():
     
     try:
         stream_id = f"f_tracker_right_{id(f_tracker)}"
+        # 直接返回create_threaded_video_stream的结果，不要再次包装
         return create_threaded_video_stream(stream_id, f_tracker.show_right)
     except Exception as e:
         logger.error(f"f_tracker右侧视频流启动失败: {e}")
         return jsonify({"error": str(e)}), 500
+
+# 为了兼容性，添加基础的 f_tracker video_feed 路由
+@app.route('/f_tracker/video_feed')
+def f_t_feed():
+    """特征点追踪器基础视频流 - 默认返回左侧视频流"""
+    return f_t_feed_left()
 
 
 # 启动 手势特征点 识别摄像头占用
@@ -919,6 +936,7 @@ def g_recognition_feed():
     
     try:
         stream_id = f"g_recognition_{id(g_recognition)}"
+        # 直接返回create_threaded_video_stream的结果，不要再次包装
         return create_threaded_video_stream(stream_id, g_recognition.run)
     except Exception as e:
         logger.error(f"手势识别视频流启动失败: {e}")
@@ -982,6 +1000,7 @@ def r_feed():
     
     try:
         stream_id = f"g_recognizer_{id(g_recognizer)}"
+        # 直接返回create_threaded_video_stream的结果，不要再次包装
         return create_threaded_video_stream(stream_id, g_recognizer.run)
     except Exception as e:
         logger.error(f"手势类别判断视频流启动失败: {e}")
@@ -1033,14 +1052,22 @@ def m_stop():
 # 接收get请求返回流式视频流
 @app.route('/m_detector/video_feed')
 def m_feed():
-    global m_detector
+    """使用多线程管理器获取MobileNetSSD检测器视频流"""
+    print("请求MobileNetSSD检测器视频流")
+    
+    if not thread_manager:
+        return jsonify({"error": "线程管理器未初始化"}), 500
+    
+    if m_detector is None:
+        return jsonify({"error": "MobileNetSSD检测器未初始化"}), 503
+    
     try:
-        if m_detector is not None:
-            return Response(m_detector.run(), mimetype='multipart/x-mixed-replace; boundary=frame')
-        else:
-            abort(404, description="视频流未初始化")
+        stream_id = f"m_detector_{id(m_detector)}"
+        # 直接返回create_threaded_video_stream的结果，不要再次包装
+        return create_threaded_video_stream(stream_id, m_detector.run)
     except Exception as e:
-        return jsonify({'message': f'获取视频流失败: {str(e)}'}), 500
+        logger.error(f"MobileNetSSD检测器视频流启动失败: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # 启动人像追踪摄像头占用
@@ -1246,10 +1273,10 @@ def init_db():
         # 检查是否有位置数据记录
         if LocationData.query.count() == 0:
             print("没有位置记录，添加默认位置...")
-            # 添加默认位置记录
+            # 添加默认位置记录 - 合肥工业大学翡翠湖校区11号宿舍楼
             default_location = LocationData(
-                longitude=117.283042,  # 合肥工业大学经度
-                latitude=31.844786,    # 合肥工业大学纬度
+                longitude=117.263228,  # 合肥工业大学翡翠湖校区11号宿舍楼经度
+                latitude=31.841395,    # 合肥工业大学翡翠湖校区11号宿舍楼纬度
                 time=datetime.now()
             )
             db.session.add(default_location)
@@ -2350,7 +2377,7 @@ def get_current_position():
 
 # ========== 增强检测器API ==========
 
-@app.route('/enhanced_detector/start', methods=['POST'])
+@app.route('/enhanced_detector/start_cameras', methods=['POST'])
 def start_enhanced_detector():
     """启动增强检测器（带碰撞检测）"""
     global enhanced_detector
@@ -2412,7 +2439,7 @@ def start_enhanced_detector():
         return jsonify({'message': f'启动失败: {str(e)}'}), 500
 
 
-@app.route('/enhanced_detector/stop', methods=['POST'])
+@app.route('/enhanced_detector/stop_cameras', methods=['POST'])
 def stop_enhanced_detector():
     """停止增强检测器"""
     global enhanced_detector
@@ -2453,6 +2480,7 @@ def enhanced_detector_feed():
     
     try:
         stream_id = f"enhanced_detector_{id(enhanced_detector)}"
+        # 直接返回create_threaded_video_stream的结果，不要再次包装
         return create_threaded_video_stream(stream_id, enhanced_detector.run)
     except Exception as e:
         logger.error(f"增强检测器视频流启动失败: {e}")
@@ -2634,11 +2662,14 @@ def predict_user_behavior():
 @app.route('/api/signal/mock_predict', methods=['POST'])
 def mock_predict_user_behavior():
     """
-    用户行为识别模拟预测API - 生成实时模拟数据（固定为静止状态）
+    用户行为识别模拟预测API - 生成实时模拟数据（固定为静止状态，持续时间递增，置信度实时变化）
     """
     try:
         import random
         import numpy as np
+        import math
+        
+        global user_behavior_state
         
         # 行为类型列表，对应训练模型中的8个类别
         behavior_types = [
@@ -2655,25 +2686,53 @@ def mock_predict_user_behavior():
         # 固定为静止状态
         predicted_behavior = 'stationary'
         
-        # 为静止状态生成实时变化的置信度（在高置信度范围内波动）
-        base_confidence = 0.92  # 基础置信度
-        confidence_variation = random.uniform(-0.05, 0.05)  # ±5% 的波动
-        confidence = max(0.85, min(0.98, base_confidence + confidence_variation))
+        # 计算持续时间（从开始时间到现在）
+        current_time = time.time()
+        behavior_duration = current_time - user_behavior_state['start_time']
         
-        # 生成模拟的传感器特征（符合静止状态的特征）
+        # 生成带有无规律性但稳定在80%以上的置信度
+        # 使用多种因子来创建自然的波动
+        time_factor = math.sin(current_time * 0.1) * 0.02  # 基于时间的缓慢振荡
+        random_factor = random.uniform(-0.03, 0.03)  # 随机波动
+        trend_factor = user_behavior_state['confidence_trend'] * 0.01  # 趋势因子
+        
+        # 基础置信度在80%-95%之间
+        base_confidence = 0.875  # 87.5%作为中心点
+        
+        # 计算新的置信度
+        new_confidence = base_confidence + time_factor + random_factor + trend_factor
+        
+        # 确保置信度在80%-98%范围内
+        new_confidence = max(0.80, min(0.98, new_confidence))
+        
+        # 更新置信度趋势（增加随机性）
+        if random.random() < 0.1:  # 10%概率改变趋势
+            user_behavior_state['confidence_trend'] *= -1
+        
+        # 如果置信度接近边界，调整趋势
+        if new_confidence >= 0.95:
+            user_behavior_state['confidence_trend'] = -1
+        elif new_confidence <= 0.82:
+            user_behavior_state['confidence_trend'] = 1
+        
+        # 更新状态
+        user_behavior_state['last_confidence'] = new_confidence
+        confidence = new_confidence
+        
+        # 生成模拟的传感器特征（符合静止状态的特征，但有微小变化）
         sensor_features = {
             'acceleration': {
-                'x': random.uniform(-0.1, 0.1),  # 静止时加速度接近0
-                'y': random.uniform(-0.1, 0.1),
-                'z': random.uniform(9.7, 9.9)    # 重力加速度
+                'x': random.uniform(-0.15, 0.15),  # 静止时加速度接近0，但有微小抖动
+                'y': random.uniform(-0.15, 0.15),
+                'z': random.uniform(9.6, 10.0)    # 重力加速度有微小变化
             },
             'gyroscope': {
-                'x': random.uniform(-0.05, 0.05),  # 静止时陀螺仪数值很小
-                'y': random.uniform(-0.05, 0.05),
-                'z': random.uniform(-0.05, 0.05)
+                'x': random.uniform(-0.08, 0.08),  # 静止时陀螺仪数值很小但有微小变化
+                'y': random.uniform(-0.08, 0.08),
+                'z': random.uniform(-0.08, 0.08)
             },
-            'gps_accuracy': random.uniform(3, 8),     # 较好的GPS精度
-            'signal_strength': random.uniform(-65, -45)  # 较强的信号
+            'gps_accuracy': random.uniform(2, 10),     # GPS精度会有变化
+            'signal_strength': random.uniform(-70, -40)  # 信号强度有波动
         }
         
         # 为静止状态生成概率分布（静止概率最高，其他很低）
@@ -2686,13 +2745,19 @@ def mock_predict_user_behavior():
             if behavior == 'stationary':
                 probabilities[behavior] = confidence
             else:
-                # 为其他行为分配小的随机概率
-                variation = random.uniform(-0.5, 0.5) * avg_other_prob
-                probabilities[behavior] = max(0.001, avg_other_prob + variation)
+                # 为其他行为分配小的随机概率，增加一些无规律性
+                variation = random.uniform(-0.7, 0.7) * avg_other_prob
+                prob = max(0.001, avg_other_prob + variation)
+                probabilities[behavior] = prob
         
         # 确保概率总和为1
         total_prob = sum(probabilities.values())
         probabilities = {k: v / total_prob for k, v in probabilities.items()}
+        
+        # 计算稳定性分数（基于持续时间和置信度）
+        stability_base = min(0.95, 0.85 + (behavior_duration / 300))  # 随时间增加稳定性
+        stability_variation = random.uniform(-0.05, 0.05)
+        stability_score = max(0.8, min(1.0, stability_base + stability_variation))
         
         # 模拟预测结果
         prediction_result = {
@@ -2701,21 +2766,23 @@ def mock_predict_user_behavior():
             'confidence': confidence,
             'probabilities': probabilities,
             'sensor_features': sensor_features,
-            'timestamp': time.time(),
+            'timestamp': current_time,
             'model_version': '1.0.0',
-            'processing_time_ms': random.uniform(15, 35),  # 静止状态处理较快
-            'behavior_duration': random.uniform(30, 120),  # 静止持续时间
+            'processing_time_ms': random.uniform(12, 40),  # 处理时间有变化
+            'behavior_duration': behavior_duration,  # 持续时间持续增加
             'movement_detected': False,  # 无运动检测
-            'stability_score': random.uniform(0.9, 1.0)  # 高稳定性分数
+            'stability_score': stability_score,  # 稳定性分数
+            'confidence_trend': user_behavior_state['confidence_trend'],  # 置信度趋势
+            'stationary_start_time': user_behavior_state['start_time']  # 静止开始时间
         }
         
         return jsonify({
             'success': True,
             'prediction': prediction_result,
-            'timestamp': time.time(),
+            'timestamp': current_time,
             'is_mock': True,
             'behavior_fixed': 'stationary',
-            'message': '模拟数据生成成功 - 固定静止状态'
+            'message': f'模拟数据生成成功 - 静止状态持续 {behavior_duration:.1f} 秒，置信度 {confidence*100:.1f}%'
         })
         
     except Exception as e:
@@ -2961,12 +3028,24 @@ def get_signal_inference_status():
     获取用户行为识别服务状态
     """
     try:
+        global user_behavior_state
+        
+        current_time = time.time()
+        current_duration = current_time - user_behavior_state['start_time']
+        
         status = {
             'available': signal_inference_available,
             'model_loaded': signal_user_inference.model is not None if signal_user_inference else False,
             'model_path': signal_user_inference.model_path if signal_user_inference else None,
             'labels': signal_user_inference.labels if signal_user_inference else [],
-            'timestamp': time.time()
+            'behavior_state': {
+                'current_behavior': 'stationary',
+                'duration': current_duration,
+                'start_time': user_behavior_state['start_time'],
+                'last_confidence': user_behavior_state['last_confidence'],
+                'confidence_trend': user_behavior_state['confidence_trend']
+            },
+            'timestamp': current_time
         }
         
         return jsonify({
@@ -2979,6 +3058,33 @@ def get_signal_inference_status():
         return jsonify({
             'success': False,
             'error': f'获取状态失败: {str(e)}'
+        }), 500
+
+@app.route('/api/signal/reset_behavior_state', methods=['POST'])
+def reset_behavior_state():
+    """
+    重置用户行为识别状态（重新开始计时）
+    """
+    try:
+        global user_behavior_state
+        
+        # 重置状态
+        user_behavior_state['start_time'] = time.time()
+        user_behavior_state['last_confidence'] = 0.85
+        user_behavior_state['confidence_trend'] = 1
+        
+        return jsonify({
+            'success': True,
+            'message': '用户行为识别状态已重置',
+            'new_start_time': user_behavior_state['start_time'],
+            'timestamp': time.time()
+        })
+        
+    except Exception as e:
+        logger.error(f"重置用户行为识别状态失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'重置状态失败: {str(e)}'
         }), 500
 
 # ========== 新增的环境感知API ==========
@@ -3143,6 +3249,13 @@ except Exception as e:
     signal_user_inference = None
     signal_inference_available = False
 
+# 用户行为识别状态跟踪
+user_behavior_state = {
+    'start_time': time.time(),  # 静止状态开始时间
+    'last_confidence': 0.85,   # 上次置信度
+    'confidence_trend': 1      # 置信度变化趋势 (1: 上升, -1: 下降)
+}
+
 # 导入轨迹追踪和碰撞预警管理器
 try:
     from utils.trajectory_collision_manager import trajectory_collision_manager
@@ -3288,6 +3401,182 @@ def get_collision_system_status():
         return jsonify({
             'success': False,
             'error': f'获取系统状态失败: {str(e)}'
+        }), 500
+
+@app.route('/api/frame_cache/status', methods=['GET'])
+def get_frame_cache_status():
+    """获取全局帧缓存状态"""
+    try:
+        from utils.global_frame_cache import get_global_frame_cache
+        global_cache = get_global_frame_cache()
+        
+        # 获取缓存统计信息
+        stats = global_cache.get_stats()
+        
+        # 检查各类型帧的可用性
+        frame_availability = {}
+        frame_types = ['color', 'depth', 'rectifiedLeft', 'rectifiedRight', 'imu']
+        
+        for frame_type in frame_types:
+            frame_availability[frame_type] = global_cache.is_frame_available(frame_type)
+        
+        # 获取当前帧时间戳
+        current_frames = global_cache.get_current_frames(['timestamp'])
+        last_update = current_frames.get('timestamp', 0)
+        
+        # 计算数据新鲜度
+        data_freshness = time.time() - last_update if last_update else float('inf')
+        
+        return jsonify({
+            'status': 'success',
+            'cache_stats': stats,
+            'frame_availability': frame_availability,
+            'last_update': last_update,
+            'data_freshness_seconds': data_freshness,
+            'is_healthy': data_freshness < 5.0,  # 5秒内的数据认为是健康的
+            'timestamp': time.time()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"获取帧缓存状态失败: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'timestamp': time.time()
+        }), 500
+
+@app.route('/api/frame_cache/frames', methods=['GET'])
+def get_frame_cache_frames():
+    """获取当前帧数据信息（不包含实际图像数据）"""
+    try:
+        from utils.global_frame_cache import get_global_frame_cache
+        global_cache = get_global_frame_cache()
+        
+        # 获取请求的帧类型
+        frame_types = request.args.getlist('types')
+        if not frame_types:
+            frame_types = ['color', 'depth', 'rectifiedLeft', 'rectifiedRight', 'imu']
+        
+        current_frames = global_cache.get_current_frames(frame_types)
+        
+        # 构建响应数据（不包含实际图像数据）
+        frame_info = {}
+        for frame_type, frame_data in current_frames.items():
+            if frame_type == 'timestamp':
+                frame_info[frame_type] = frame_data
+            elif frame_data is not None:
+                if hasattr(frame_data, 'shape'):
+                    frame_info[frame_type] = {
+                        'available': True,
+                        'shape': frame_data.shape,
+                        'dtype': str(frame_data.dtype) if hasattr(frame_data, 'dtype') else 'unknown'
+                    }
+                else:
+                    frame_info[frame_type] = {
+                        'available': True,
+                        'type': str(type(frame_data)),
+                        'size': len(frame_data) if hasattr(frame_data, '__len__') else 'unknown'
+                    }
+            else:
+                frame_info[frame_type] = {
+                    'available': False
+                }
+        
+        return jsonify({
+            'status': 'success',
+            'frames': frame_info,
+            'timestamp': time.time()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"获取帧数据信息失败: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'timestamp': time.time()
+        }), 500
+
+@app.route('/api/frame_cache/clear', methods=['POST'])
+def clear_frame_cache():
+    """清空全局帧缓存"""
+    try:
+        from utils.global_frame_cache import get_global_frame_cache
+        global_cache = get_global_frame_cache()
+        
+        global_cache.clear_cache()
+        
+        return jsonify({
+            'status': 'success',
+            'message': '帧缓存已清空',
+            'timestamp': time.time()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"清空帧缓存失败: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'timestamp': time.time()
+        }), 500
+
+@app.route('/api/video_streams/status', methods=['GET'])
+def get_video_streams_status():
+    """获取所有视频流的状态"""
+    try:
+        streams_status = {}
+        
+        # 检查各个视频流处理器的状态
+        video_processors = {
+            'd_estimator': d_estimator,
+            'f_detector': f_detector,
+            'f_tracker': f_tracker,
+            'g_recognition': g_recognition,
+            'g_recognizer': g_recognizer,
+            'm_detector': m_detector,
+            'p_video': p_video,
+            's_RGB': s_RGB
+        }
+        
+        for name, processor in video_processors.items():
+            if processor is not None:
+                streams_status[name] = {
+                    'initialized': True,
+                    'running': getattr(processor, 'is_running', False) or getattr(processor, 'continue_running', False),
+                    'type': type(processor).__name__
+                }
+            else:
+                streams_status[name] = {
+                    'initialized': False,
+                    'running': False,
+                    'type': None
+                }
+        
+        # 获取设备管理器状态
+        device_status = {
+            'initialized': device_manager is not None,
+            'running': device_manager.is_running() if device_manager else False
+        }
+        
+        # 获取线程管理器状态
+        thread_status = {
+            'initialized': thread_manager is not None,
+            'active_streams': len(thread_manager.streams) if thread_manager else 0
+        }
+        
+        return jsonify({
+            'status': 'success',
+            'streams': streams_status,
+            'device_manager': device_status,
+            'thread_manager': thread_status,
+            'timestamp': time.time()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"获取视频流状态失败: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'timestamp': time.time()
         }), 500
 
 if __name__ == '__main__':

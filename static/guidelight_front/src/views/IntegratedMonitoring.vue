@@ -267,6 +267,10 @@
                   <div class="result-content">
                     <div class="result-name">{{ result.name }}</div>
                     <div class="result-address">{{ result.address }}</div>
+                    <div class="result-meta">
+                      <span v-if="result.type" class="result-type">{{ result.type }}</span>
+                      <span v-if="result.distance && result.distance !== '0.0'" class="result-distance">{{ result.distance }}km</span>
+                    </div>
                   </div>
                   <div class="result-action">
                     <el-icon><ArrowRight /></el-icon>
@@ -337,7 +341,7 @@
                   <div class="info-icon">🛣️</div>
                   <div class="info-content">
                     <span class="label">推荐路线</span>
-                    <span class="value">{{ routeInfo.route }}</span>
+                    <span class="value route-text">{{ routeInfo.route }}</span>
                   </div>
                 </div>
               </div>
@@ -859,9 +863,9 @@ const lastVoiceCommand = ref<any>(null)
 
 // 导航相关
 const currentLocation = reactive({
-  lng: 117.283042,
-  lat: 31.844786,
-  address: '合肥工业大学'
+  lng: 117.263228,  // 合肥工业大学翡翠湖校区11号宿舍楼经度
+  lat: 31.841395,   // 合肥工业大学翡翠湖校区11号宿舍楼纬度
+  address: '合肥工业大学翡翠湖校区11号宿舍楼'
 })
 
 const destination = reactive({
@@ -1468,10 +1472,16 @@ const startNavigation = () => {
     return
   }
   
+  if (!currentLocation.lng || !currentLocation.lat) {
+    ElMessage.warning('请先获取当前位置')
+    getCurrentLocation()
+    return
+  }
+  
   addTerminalLog(`开始导航到: ${destination.address}`, 'info')
   ElMessage.success('导航已开始')
   
-  // 计算路线
+  // 计算并绘制路线
   calculateRoute()
 }
 
@@ -1503,90 +1513,173 @@ const searchDestination = async () => {
   try {
     addTerminalLog(`搜索目的地: ${searchKeyword.value}`, 'info')
     
-    // 使用高德地图API搜索
+    // 使用高德地图POI搜索API
     if (window.AMap && window.AMap.PlaceSearch) {
       const placeSearch = new window.AMap.PlaceSearch({
-        city: '合肥',
-        pageSize: 10,
-        pageIndex: 1
+        city: '合肥市',  // 指定搜索城市
+        citylimit: true,  // 强制在指定城市内搜索
+        pageSize: 20,     // 增加搜索结果数量
+        pageIndex: 1,
+        extensions: 'all'  // 返回详细信息
       })
       
       return new Promise<void>((resolve) => {
         placeSearch.search(searchKeyword.value, (status: string, result: any) => {
           if (status === 'complete' && result.info === 'OK') {
-            searchResults.value = result.poiList.pois.map((poi: any, index: number) => ({
-              id: index + 1,
-              name: poi.name,
-              address: poi.address,
-              lng: poi.location.lng,
-              lat: poi.location.lat
-            }))
-            addTerminalLog(`找到 ${searchResults.value.length} 个搜索结果`, 'success')
-          } else {
-            // 如果API搜索失败，使用模拟数据
-            searchResults.value = [
-              {
-                id: 1,
-                name: '合肥火车站',
-                address: '安徽省合肥市瑶海区站前路',
-                lng: 117.301692,
-                lat: 31.878719
-              },
-              {
-                id: 2,
-                name: '合肥南站',
-                address: '安徽省合肥市包河区徽州大道',
-                lng: 117.219983,
-                lat: 31.745087
-              },
-              {
-                id: 3,
-                name: '合肥市政府',
-                address: '安徽省合肥市蜀山区东流路',
-                lng: 117.243534,
-                lat: 31.820592
+            const pois = result.poiList?.pois || []
+            
+            // 处理搜索结果，添加更多信息
+            searchResults.value = pois.map((poi: any, index: number) => {
+              // 计算距离（如果有当前位置）
+              let distance = 0
+              if (currentLocation.lng && currentLocation.lat && poi.location) {
+                const R = 6371 // 地球半径（公里）
+                const dLat = (poi.location.lat - currentLocation.lat) * Math.PI / 180
+                const dLng = (poi.location.lng - currentLocation.lng) * Math.PI / 180
+                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                         Math.cos(currentLocation.lat * Math.PI / 180) * Math.cos(poi.location.lat * Math.PI / 180) *
+                         Math.sin(dLng/2) * Math.sin(dLng/2)
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+                distance = R * c
               }
-            ]
-            addTerminalLog('使用模拟搜索结果', 'warning')
+              
+              return {
+                id: poi.id || (index + 1),
+                name: poi.name,
+                address: poi.address || poi.pname + poi.cityname + poi.adname,
+                lng: poi.location.lng,
+                lat: poi.location.lat,
+                distance: distance.toFixed(1),
+                type: poi.type || '地点',
+                tel: poi.tel || '',
+                business_area: poi.business_area || '',
+                pname: poi.pname || '',  // 省份
+                cityname: poi.cityname || '',  // 城市
+                adname: poi.adname || ''  // 区县
+              }
+            })
+            
+            // 按相关性和距离排序
+            searchResults.value.sort((a, b) => {
+              // 火车站类型优先
+              const aIsStation = a.name.includes('火车站') || a.name.includes('站') || a.name.includes('高铁')
+              const bIsStation = b.name.includes('火车站') || b.name.includes('站') || b.name.includes('高铁')
+              
+              if (aIsStation && !bIsStation) return -1
+              if (!aIsStation && bIsStation) return 1
+              
+              // 然后按距离排序
+              return parseFloat(a.distance) - parseFloat(b.distance)
+            })
+            
+            addTerminalLog(`高德地图搜索到 ${searchResults.value.length} 个结果`, 'success')
+          } else {
+            addTerminalLog(`高德地图搜索失败: ${result?.info || status}`, 'warning')
+            // 使用本地搜索逻辑作为备选
+            useLocalSearch()
           }
           isSearching.value = false
           resolve()
         })
       })
     } else {
-      // 如果没有加载地图API，使用模拟数据
-      setTimeout(() => {
-        searchResults.value = [
-          {
-            id: 1,
-            name: '合肥火车站',
-            address: '安徽省合肥市瑶海区站前路',
-            lng: 117.301692,
-            lat: 31.878719
-          },
-          {
-            id: 2,
-            name: '合肥南站',
-            address: '安徽省合肥市包河区徽州大道',
-            lng: 117.219983,
-            lat: 31.745087
-          },
-          {
-            id: 3,
-            name: '合肥市政府',
-            address: '安徽省合肥市蜀山区东流路',
-            lng: 117.243534,
-            lat: 31.820592
-          }
-        ]
-        isSearching.value = false
-        addTerminalLog(`找到 ${searchResults.value.length} 个搜索结果`, 'success')
-      }, 1000)
+      addTerminalLog('高德地图API未加载，使用本地搜索', 'warning')
+      useLocalSearch()
     }
   } catch (error) {
     isSearching.value = false
     addTerminalLog('搜索失败: ' + error, 'error')
     ElMessage.error('搜索失败')
+  }
+}
+
+// 本地搜索逻辑（备选方案）
+const useLocalSearch = () => {
+  const keyword = searchKeyword.value.toLowerCase()
+  
+  // 合肥主要地点数据库
+  const hefeiPlaces = [
+    // 火车站
+    { name: '合肥站', alias: ['合肥火车站', '火车站'], address: '安徽省合肥市瑶海区站前路', lng: 117.301692, lat: 31.878719, type: '火车站' },
+    { name: '合肥南站', alias: ['合肥南', '高铁南站'], address: '安徽省合肥市包河区徽州大道', lng: 117.219983, lat: 31.745087, type: '高铁站' },
+    { name: '合肥西站', alias: ['合肥西'], address: '安徽省合肥市蜀山区', lng: 117.185432, lat: 31.853267, type: '火车站' },
+    
+    // 机场
+    { name: '合肥新桥国际机场', alias: ['机场', '新桥机场'], address: '安徽省合肥市肥西县', lng: 117.298332, lat: 31.781479, type: '机场' },
+    
+    // 政府机构
+    { name: '合肥市政府', alias: ['市政府'], address: '安徽省合肥市蜀山区东流路', lng: 117.243534, lat: 31.820592, type: '政府机构' },
+    { name: '安徽省政府', alias: ['省政府'], address: '安徽省合肥市包河区中山路', lng: 117.284124, lat: 31.861184, type: '政府机构' },
+    
+    // 大学
+    { name: '中国科学技术大学', alias: ['中科大', '科大'], address: '安徽省合肥市包河区金寨路', lng: 117.263228, lat: 31.841395, type: '大学' },
+    { name: '合肥工业大学', alias: ['合工大'], address: '安徽省合肥市包河区屯溪路', lng: 117.283042, lat: 31.844786, type: '大学' },
+    { name: '安徽大学', alias: ['安大'], address: '安徽省合肥市蜀山区九龙路', lng: 117.262909, lat: 31.906045, type: '大学' },
+    
+    // 商业中心
+    { name: '万达广场', alias: ['万达'], address: '安徽省合肥市蜀山区潜山路', lng: 117.223445, lat: 31.853267, type: '商业中心' },
+    { name: '银泰中心', alias: ['银泰'], address: '安徽省合肥市蜀山区长江西路', lng: 117.241234, lat: 31.862345, type: '商业中心' },
+    
+    // 医院
+    { name: '安徽医科大学第一附属医院', alias: ['安医一附院'], address: '安徽省合肥市蜀山区绩溪路', lng: 117.264532, lat: 31.851234, type: '医院' },
+    { name: '安徽省立医院', alias: ['省立医院'], address: '安徽省合肥市庐阳区庐江路', lng: 117.285432, lat: 31.871234, type: '医院' }
+  ]
+  
+  // 搜索匹配
+  const results = hefeiPlaces.filter(place => {
+    const nameMatch = place.name.toLowerCase().includes(keyword)
+    const aliasMatch = place.alias.some(alias => alias.toLowerCase().includes(keyword))
+    const addressMatch = place.address.toLowerCase().includes(keyword)
+    
+    return nameMatch || aliasMatch || addressMatch
+  }).map((place, index) => {
+    // 计算距离
+    let distance = 0
+    if (currentLocation.lng && currentLocation.lat) {
+      const R = 6371
+      const dLat = (place.lat - currentLocation.lat) * Math.PI / 180
+      const dLng = (place.lng - currentLocation.lng) * Math.PI / 180
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+               Math.cos(currentLocation.lat * Math.PI / 180) * Math.cos(place.lat * Math.PI / 180) *
+               Math.sin(dLng/2) * Math.sin(dLng/2)
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+      distance = R * c
+    }
+    
+    return {
+      id: index + 1,
+      name: place.name,
+      address: place.address,
+      lng: place.lng,
+      lat: place.lat,
+      distance: distance.toFixed(1),
+      type: place.type,
+      tel: '',
+      business_area: '',
+      pname: '安徽省',
+      cityname: '合肥市',
+      adname: ''
+    }
+  })
+  
+  // 按相关性排序（火车站优先，然后按距离）
+  results.sort((a, b) => {
+    const aIsStation = a.type.includes('火车站') || a.type.includes('高铁站')
+    const bIsStation = b.type.includes('火车站') || b.type.includes('高铁站')
+    
+    if (aIsStation && !bIsStation) return -1
+    if (!aIsStation && bIsStation) return 1
+    
+    return parseFloat(a.distance) - parseFloat(b.distance)
+  })
+  
+  searchResults.value = results.slice(0, 10) // 最多返回10个结果
+  isSearching.value = false
+  
+  if (results.length > 0) {
+    addTerminalLog(`本地搜索找到 ${results.length} 个结果`, 'success')
+  } else {
+    addTerminalLog('未找到匹配的地点', 'warning')
   }
 }
 
@@ -1602,61 +1695,144 @@ const selectDestination = (result: any) => {
   
   // 在地图上标记目的地
   if (map) {
+    // 清除之前的目的地标记
+    const overlays = map.getAllOverlays('marker')
+    overlays.forEach((overlay: any) => {
+      if (overlay.getExtData() === 'destination') {
+        map.remove(overlay)
+      }
+    })
+    
     const marker = new window.AMap.Marker({
       position: [result.lng, result.lat],
       icon: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png',
       anchor: 'bottom-center',
+      extData: 'destination',
       label: {
         content: result.name,
         direction: 'top'
       }
     })
     map.add(marker)
+    
+    // 自动计算并绘制路径
+    calculateRoute()
   }
 }
 
 const calculateRoute = () => {
-  if (!map || !destination.lng || !destination.lat) return
+  if (!map || !destination.lng || !destination.lat || !currentLocation.lng || !currentLocation.lat) {
+    addTerminalLog('无法计算路线：缺少起点或终点信息', 'error')
+    return
+  }
   
-  // 计算路线
+  addTerminalLog('正在计算导航路线...', 'info')
+  
+  // 清除之前的路线
+  if (navigationPath) {
+    map.remove(navigationPath)
+    navigationPath = null
+  }
+  
+  // 创建驾车路线规划实例
   const driving = new window.AMap.Driving({
-    policy: window.AMap.DrivingPolicy.LEAST_TIME
+    policy: window.AMap.DrivingPolicy.LEAST_TIME,
+    ferry: 1,
+    map: map,
+    panel: null
   })
   
-  driving.search([currentLocation.lng, currentLocation.lat], [destination.lng, destination.lat], (status: string, result: any) => {
-    if (status === 'complete') {
-      const route = result.routes[0]
-      routeInfo.distance = (route.distance / 1000).toFixed(1) + 'km'
-      routeInfo.duration = Math.round(route.time / 60) + 'min'
-      routeInfo.route = route.steps.map((step: any) => step.instruction).join(' -> ')
-      
-      // 绘制路线
-      const path = []
-      route.steps.forEach((step: any) => {
-        step.path.forEach((point: any) => {
-          path.push([point.lng, point.lat])
-        })
-      })
-      
-      if (navigationPath) {
-        map.remove(navigationPath)
+  // 根据起终点坐标规划驾车导航路线
+  driving.search(
+    new window.AMap.LngLat(currentLocation.lng, currentLocation.lat),
+    new window.AMap.LngLat(destination.lng, destination.lat),
+    (status: string, result: any) => {
+      if (status === 'complete') {
+        if (result.routes && result.routes.length > 0) {
+          const route = result.routes[0]
+          
+          // 更新路线信息
+          routeInfo.distance = (route.distance / 1000).toFixed(1) + 'km'
+          routeInfo.duration = Math.round(route.time / 60) + 'min'
+          
+          // 生成路线描述
+          const instructions = []
+          if (route.steps && route.steps.length > 0) {
+            route.steps.forEach((step: any, index: number) => {
+              if (step.instruction && step.instruction.trim()) {
+                instructions.push(`${index + 1}. ${step.instruction}`)
+              }
+            })
+          }
+          routeInfo.route = instructions.length > 0 ? instructions.slice(0, 3).join(' → ') : '路线规划中...'
+          
+          // 绘制路线
+          const path: any[] = []
+          if (route.steps) {
+            route.steps.forEach((step: any) => {
+              if (step.path && step.path.length > 0) {
+                step.path.forEach((point: any) => {
+                  if (point.lng && point.lat) {
+                    path.push([point.lng, point.lat])
+                  }
+                })
+              }
+            })
+          }
+          
+          if (path.length > 0) {
+            console.log('绘制路径，路径点数量:', path.length)
+            addTerminalLog(`准备绘制路径，包含 ${path.length} 个路径点`, 'info')
+            
+            // 创建路线折线
+            try {
+              navigationPath = new window.AMap.Polyline({
+                path: path,
+                strokeColor: '#FF5722',    // 橙红色路线，更明显
+                strokeWeight: 6,           // 线条粗细
+                strokeOpacity: 1.0,        // 完全不透明
+                strokeStyle: 'solid',      // 线条样式
+                lineJoin: 'round',         // 线条连接点样式
+                lineCap: 'round',          // 线条端点样式
+                zIndex: 1000,              // 更高的层级
+                showDir: true,             // 显示方向箭头
+                bubble: true
+              })
+              
+              map.add(navigationPath)
+              console.log('路径已添加到地图')
+              addTerminalLog('路径已成功绘制到地图上', 'success')
+              
+              // 调整地图视野以包含整条路线
+              const bounds = new window.AMap.Bounds()
+              bounds.extend([currentLocation.lng, currentLocation.lat])
+              bounds.extend([destination.lng, destination.lat])
+              
+              // 设置地图显示范围，包含起点和终点
+              map.setBounds(bounds, false, [50, 50, 50, 50])
+              
+              addTerminalLog(`路线规划完成: ${routeInfo.distance}, 预计 ${routeInfo.duration}`, 'success')
+              ElMessage.success('路线规划完成，路径已显示')
+            } catch (error) {
+              console.error('绘制路径时出错:', error)
+              addTerminalLog(`绘制路径失败: ${error}`, 'error')
+              ElMessage.error('路径绘制失败')
+            }
+          } else {
+            addTerminalLog('路线数据为空', 'error')
+            ElMessage.error('无法获取路线数据')
+          }
+        } else {
+          addTerminalLog('未找到可用路线', 'error')
+          ElMessage.error('未找到可用路线')
+        }
+      } else {
+        const errorMsg = result?.info || '路线规划失败'
+        addTerminalLog(`路线规划失败: ${errorMsg}`, 'error')
+        ElMessage.error(`路线规划失败: ${errorMsg}`)
       }
-      
-      navigationPath = new window.AMap.Polyline({
-        path: path,
-        strokeColor: '#409EFF',
-        strokeWeight: 6,
-        strokeOpacity: 0.8
-      })
-      
-      map.add(navigationPath)
-      map.setFitView([navigationPath])
-      
-      addTerminalLog(`路线计算完成: ${routeInfo.distance}, ${routeInfo.duration}`, 'success')
-    } else {
-      addTerminalLog('路线计算失败', 'error')
     }
-  })
+  )
 }
 
 // 位置模拟器
@@ -1773,16 +1949,28 @@ const initMap = () => {
   // 确保高德地图API已加载
   if (typeof window.AMap === 'undefined') {
     console.error('高德地图API未加载')
+    addTerminalLog('高德地图API未加载，请检查网络连接', 'error')
     return
   }
   
   try {
+    addTerminalLog('开始初始化高德地图...', 'info')
+    console.log('当前位置:', currentLocation.lng, currentLocation.lat)
+    
     // 创建地图实例
     map = new window.AMap.Map('map-container', {
-      zoom: 15,
+      zoom: 16,  // 增加缩放级别，显示更多细节
       resizeEnable: true,
       center: [currentLocation.lng, currentLocation.lat],
-      viewMode: '2D'
+      viewMode: '2D',
+      features: ['bg', 'road', 'building', 'point'],  // 显示背景、道路、建筑、兴趣点
+      mapStyle: 'amap://styles/normal'  // 使用标准地图样式
+    })
+    
+    // 地图加载完成事件
+    map.on('complete', () => {
+      addTerminalLog('地图加载完成', 'success')
+      console.log('地图已完全加载')
     })
     
     // 添加地图控件
@@ -1807,12 +1995,16 @@ const initMap = () => {
       position: [currentLocation.lng, currentLocation.lat],
       icon: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png',
       anchor: 'bottom-center',
+      title: currentLocation.address,
       label: {
-        content: '当前位置',
-        direction: 'top'
+        content: currentLocation.address,
+        direction: 'top',
+        offset: new window.AMap.Pixel(0, -10)
       }
     })
     map.add(marker)
+    
+    addTerminalLog(`当前位置标记已添加: ${currentLocation.address}`, 'success')
     
     // 添加地图点击事件 - 设置目的地
     map.on('click', handleMapClick)
@@ -1896,10 +2088,37 @@ const setDestination = (dest: any) => {
 
 // 初始化搜索服务
 const initSearchService = () => {
-  if (typeof window.AMap === 'undefined') return
+  if (typeof window.AMap === 'undefined') {
+    addTerminalLog('高德地图API未加载，搜索服务初始化失败', 'error')
+    return
+  }
   
-  // 这里可以初始化高德地图的搜索服务
-  addTerminalLog('搜索服务初始化成功', 'success')
+  try {
+    // 加载高德地图搜索相关插件
+    window.AMap.plugin(['AMap.PlaceSearch', 'AMap.Geocoder', 'AMap.Autocomplete'], () => {
+      addTerminalLog('高德地图搜索插件加载成功', 'success')
+      
+      // 测试搜索功能
+      const testSearch = new window.AMap.PlaceSearch({
+        city: '合肥市',
+        citylimit: true,
+        pageSize: 1
+      })
+      
+      // 测试搜索一个已知地点
+      testSearch.search('合肥火车站', (status: string, result: any) => {
+        if (status === 'complete' && result.info === 'OK') {
+          addTerminalLog('搜索服务测试成功', 'success')
+        } else {
+          addTerminalLog(`搜索服务测试失败: ${result?.info || status}`, 'warning')
+        }
+      })
+    })
+    
+    addTerminalLog('搜索服务初始化成功', 'success')
+  } catch (error) {
+    addTerminalLog(`搜索服务初始化失败: ${error}`, 'error')
+  }
 }
 
 // 生命周期钩子
@@ -2458,6 +2677,14 @@ onBeforeUnmount(() => {
   padding: 20px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   transition: all 0.3s ease;
+  position: relative;
+  z-index: 1000;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .navigation-container:hover {
@@ -2520,8 +2747,8 @@ onBeforeUnmount(() => {
 }
 
 .search-results {
-  position: absolute;
-  top: 100%;
+  position: relative;
+  top: 0;
   left: 0;
   right: 0;
   background: rgba(0, 0, 0, 0.9);
@@ -2529,9 +2756,10 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   max-height: 300px;
   overflow-y: auto;
-  z-index: 1000;
+  z-index: 10;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(10px);
+  margin-top: 10px;
 }
 
 .search-results-header {
@@ -2582,6 +2810,30 @@ onBeforeUnmount(() => {
   color: #b0bec5;
 }
 
+.result-meta {
+  display: flex;
+  gap: 10px;
+  margin-top: 5px;
+}
+
+.result-type {
+  font-size: 0.7rem;
+  color: #409EFF;
+  background: rgba(64, 158, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(64, 158, 255, 0.2);
+}
+
+.result-distance {
+  font-size: 0.7rem;
+  color: #67C23A;
+  background: rgba(103, 194, 58, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(103, 194, 58, 0.2);
+}
+
 .result-distance {
   font-size: 0.8rem;
   color: #67C23A;
@@ -2600,18 +2852,23 @@ onBeforeUnmount(() => {
 .map-display {
   height: 450px;
   min-height: 450px;
+  max-height: 450px;
   background: rgba(0, 0, 0, 0.3);
   border-radius: 12px;
   position: relative;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 #map-container {
   width: 100%;
   height: 100%;
   border-radius: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .map-placeholder {
@@ -2670,6 +2927,9 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   padding: 20px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .nav-info-header {
@@ -2754,6 +3014,19 @@ onBeforeUnmount(() => {
   font-size: 0.9rem;
   font-weight: 600;
   color: #ffffff;
+}
+
+.route-text {
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+  line-height: 1.4;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 .destination-item {
@@ -3527,6 +3800,9 @@ onBeforeUnmount(() => {
   border-radius: 16px;
   padding: 20px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  z-index: 10;
+  margin-bottom: 20px;
 }
 
 .search-header {
@@ -3544,6 +3820,7 @@ onBeforeUnmount(() => {
 
 .search-input-container {
   position: relative;
+  z-index: 10;
 }
 
 .smart-search-input {
@@ -3576,6 +3853,8 @@ onBeforeUnmount(() => {
   margin-top: 15px;
   overflow: hidden;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  position: relative;
+  z-index: 10;
 }
 
 .results-header {
@@ -3655,6 +3934,9 @@ onBeforeUnmount(() => {
   padding: 20px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   min-height: 500px;
+  position: relative;
+  z-index: 1;
+  margin-bottom: 20px;
 }
 
 .map-header {
@@ -3830,7 +4112,7 @@ onBeforeUnmount(() => {
   border: 1px solid #dcdfe6;
   border-radius: 4px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  z-index: 100;
+  z-index: 9999;
 }
 
 .search-result-item {

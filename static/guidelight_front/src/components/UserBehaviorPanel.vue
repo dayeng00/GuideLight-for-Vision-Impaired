@@ -256,17 +256,8 @@ const fetchBehaviorData = async () => {
 }
 
 const generateMockData = () => {
-  // 固定为静止状态，但置信度会实时变化
-  const baseConfidence = 0.92
-  const timeVariation = Math.sin(Date.now() / 5000) * 0.03 // 基于时间的正弦波变化
-  const randomNoise = (Math.random() - 0.5) * 0.02 // 小幅随机噪声
-  const confidence = Math.max(0.85, Math.min(0.98, baseConfidence + timeVariation + randomNoise))
-  
-  updateBehaviorData({
-    predicted_class: 'stationary',
-    confidence: confidence,
-    timestamp: Date.now()
-  })
+  // 不再使用模拟数据，而是调用真实API
+  fetchBehaviorData()
 }
 
 const updateBehaviorData = (prediction: any) => {
@@ -274,7 +265,7 @@ const updateBehaviorData = (prediction: any) => {
     type: prediction.predicted_class || prediction.behavior_type || 'stationary',
     confidence: prediction.confidence || 0.8,
     timestamp: prediction.timestamp || Date.now(),
-    duration: 1
+    duration: prediction.behavior_duration || 1
   }
   
   // 如果行为类型发生变化，更新历史记录
@@ -282,7 +273,7 @@ const updateBehaviorData = (prediction: any) => {
     // 添加到历史记录
     behaviorHistory.value.unshift({
       ...currentBehavior,
-      duration: Math.floor((Date.now() - currentBehavior.timestamp) / 1000)
+      duration: Math.floor(currentBehavior.duration)
     })
     
     // 限制历史记录数量
@@ -294,15 +285,15 @@ const updateBehaviorData = (prediction: any) => {
     const prevType = currentBehavior.type
     if (behaviorStats[prevType]) {
       behaviorStats[prevType].count++
-      behaviorStats[prevType].totalDuration += Math.floor((Date.now() - currentBehavior.timestamp) / 1000)
+      behaviorStats[prevType].totalDuration += Math.floor(currentBehavior.duration)
     }
     
     // 更新当前行为
     Object.assign(currentBehavior, newBehavior)
   } else {
-    // 更新置信度和持续时间
+    // 更新置信度和持续时间（使用后端返回的真实持续时间）
     currentBehavior.confidence = newBehavior.confidence
-    currentBehavior.duration = Math.floor((Date.now() - currentBehavior.timestamp) / 1000)
+    currentBehavior.duration = Math.floor(newBehavior.duration)
   }
   
   // 更新图表
@@ -315,10 +306,10 @@ const startRealTimeProcessing = () => {
   // 立即获取一次数据
   fetchBehaviorData()
   
-  // 定期更新数据
+  // 定期更新数据，更频繁地更新以显示实时变化
   updateTimer = setInterval(() => {
     fetchBehaviorData()
-  }, 2000) // 每2秒更新一次
+  }, 1000) // 每1秒更新一次，以便更好地显示置信度变化和持续时间增加
 }
 
 const initChart = () => {
@@ -427,8 +418,9 @@ onMounted(() => {
     initChart()
   })
   
-  // 开始模拟数据生成
-  generateMockData()
+  // 自动开始实时处理
+  isProcessing.value = true
+  startRealTimeProcessing()
 })
 
 onBeforeUnmount(() => {

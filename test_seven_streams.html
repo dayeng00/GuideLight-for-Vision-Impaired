@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GuideLight 7个视频流测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .stream-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .stream-card { border: 1px solid #ddd; padding: 15px; border-radius: 8px; }
+        .stream-card h3 { margin-top: 0; color: #333; }
+        .controls { margin-bottom: 10px; }
+        .btn { padding: 8px 16px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-start { background-color: #4CAF50; color: white; }
+        .btn-stop { background-color: #f44336; color: white; }
+        img { max-width: 100%; height: auto; border: 1px solid #ccc; }
+        .dual-view { display: flex; gap: 10px; }
+        .dual-view img { width: 48%; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GuideLight 7个视频流测试页面</h1>
+        <p>这个页面用于测试所有7个视频流的启动和显示功能。</p>
+        
+        <div class="stream-grid">
+
+            <div class="stream-card">
+                <h3>视差估计</h3>
+                <div class="controls">
+                    <button class="btn btn-start" onclick="startCamera('d_estimator')">启动</button>
+                    <button class="btn btn-stop" onclick="stopCamera('d_estimator')">停止</button>
+                </div>
+                <div id="d_estimator-status">状态: 未启动</div>
+                <div class="video-container">
+
+                    <img id="d_estimator-single" src="about:blank" alt="视频流" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y4ZjhmOCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjE2cHgiIGZpbGw9IiM5OTkiPuinhumikeWktOeQhzwvdGV4dD48L3N2Zz4='" />
+
+                </div>
+            </div>
+
+            <div class="stream-card">
+                <h3>特征点检测</h3>
+                <div class="controls">
+                    <button class="btn btn-start" onclick="startCamera('f_detector')">启动</button>
+                    <button class="btn btn-stop" onclick="stopCamera('f_detector')">停止</button>
+                </div>
+                <div id="f_detector-status">状态: 未启动</div>
+                <div class="video-container">
+
+                    <div class="dual-view">
+                        <img id="f_detector-left" src="about:blank" alt="左视图" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgZmlsbD0iI2Y4ZjhmOCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjE0cHgiIGZpbGw9IiM5OTkiPuW3puinhuWbvjwvdGV4dD48L3N2Zz4='" />
+                        <img id="f_detector-right" src="about:blank" alt="右视图" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgZmlsbD0iI2Y4ZjhmOCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjE0cHgiIGZpbGw9IiM5OTkiPuWPs+inhuWbvjwvdGV4dD48L3N2Zz4='" />
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="stream-card">
+                <h3>特征点追踪</h3>
+                <div class="controls">
+                    <button class="btn btn-start" onclick="startCamera('f_tracker')">启动</button>
+                    <button class="btn btn-stop" onclick="stopCamera('f_tracker')">停止</button>
+                </div>
+                <div id="f_tracker-status">状态: 未启动</div>
+                <div class="video-container">
+
+                    <div class="dual-view">
+                        <img id="f_tracker-left" src="about:blank" alt="左视图" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgZmlsbD0iI2Y4ZjhmOCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjE0cHgiIGZpbGw9IiM5OTkiPuW3puinhuWbvjwvdGV4dD48L3N2Zz4='" />
+                        <img id="f_tracker-right" src="about:blank" alt="右视图" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgZmlsbD0iI2Y4ZjhmOCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjE0cHgiIGZpbGw9IiM5OTkiPuWPs+inhuWbvjwvdGV4dD48L3N2Zz4='" />
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="stream-card">
+                <h3>手势特征点识别</h3>
+                <div class="controls">
+                    <button class="btn btn-start" onclick="startCamera('g_recognition')">启动</button>
+                    <button class="btn btn-stop" onclick="stopCamera('g_recognition')">停止</button>
+                </div>
+                <div id="g_recognition-status">状态: 未启动</div>
+                <div class="video-container">
+
+                    <img id="g_recognition-single" src="about:blank" alt="视频流" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y4ZjhmOCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjE2cHgiIGZpbGw9IiM5OTkiPuinhumikeWktOeQhzwvdGV4dD48L3N2Zz4='" />
+
+                </div>
+            </div>
+
+            <div class="stream-card">
+                <h3>手势类别判断</h3>
+                <div class="controls">
+                    <button class="btn btn-start" onclick="startCamera('g_recognizer')">启动</button>
+                    <button class="btn btn-stop" onclick="stopCamera('g_recognizer')">停止</button>
+                </div>
+                <div id="g_recognizer-status">状态: 未启动</div>
+                <div class="video-container">
+
+                    <img id="g_recognizer-single" src="about:blank" alt="视频流" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y4ZjhmOCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjE2cHgiIGZpbGw9IiM5OTkiPuinhumikeWktOeQhzwvdGV4dD48L3N2Zz4='" />
+
+                </div>
+            </div>
+
+            <div class="stream-card">
+                <h3>MobileNetSSD目标检测</h3>
+                <div class="controls">
+                    <button class="btn btn-start" onclick="startCamera('m_detector')">启动</button>
+                    <button class="btn btn-stop" onclick="stopCamera('m_detector')">停止</button>
+                </div>
+                <div id="m_detector-status">状态: 未启动</div>
+                <div class="video-container">
+
+                    <img id="m_detector-single" src="about:blank" alt="视频流" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y4ZjhmOCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjE2cHgiIGZpbGw9IiM5OTkiPuinhumikeWktOeQhzwvdGV4dD48L3N2Zz4='" />
+
+                </div>
+            </div>
+
+            <div class="stream-card">
+                <h3>增强检测器</h3>
+                <div class="controls">
+                    <button class="btn btn-start" onclick="startCamera('enhanced_detector')">启动</button>
+                    <button class="btn btn-stop" onclick="stopCamera('enhanced_detector')">停止</button>
+                </div>
+                <div id="enhanced_detector-status">状态: 未启动</div>
+                <div class="video-container">
+
+                    <img id="enhanced_detector-single" src="about:blank" alt="视频流" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y4ZjhmOCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjE2cHgiIGZpbGw9IiM5OTkiPuinhumikeWktOeQhzwvdGV4dD48L3N2Zz4='" />
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+    
+    <script>
+        const BASE_URL = 'http://localhost:5000';
+        
+        async function startCamera(cameraType) {
+            const statusElement = document.getElementById(cameraType + '-status');
+            statusElement.textContent = '状态: 启动中...';
+            
+            try {
+                const response = await fetch(`${BASE_URL}/${cameraType}/start_cameras`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    statusElement.textContent = '状态: 已启动';
+                    updateVideoStreams(cameraType);
+                } else {
+                    statusElement.textContent = '状态: 启动失败';
+                }
+            } catch (error) {
+                statusElement.textContent = '状态: 启动错误 - ' + error.message;
+            }
+        }
+        
+        async function stopCamera(cameraType) {
+            const statusElement = document.getElementById(cameraType + '-status');
+            statusElement.textContent = '状态: 停止中...';
+            
+            try {
+                const response = await fetch(`${BASE_URL}/${cameraType}/stop_cameras`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    statusElement.textContent = '状态: 已停止';
+                    clearVideoStreams(cameraType);
+                } else {
+                    statusElement.textContent = '状态: 停止失败';
+                }
+            } catch (error) {
+                statusElement.textContent = '状态: 停止错误 - ' + error.message;
+            }
+        }
+        
+        function updateVideoStreams(cameraType) {
+            const timestamp = Date.now();
+            const dualCameras = ['f_detector', 'f_tracker'];
+            
+            if (dualCameras.includes(cameraType)) {
+                const leftImg = document.getElementById(cameraType + '-left');
+                const rightImg = document.getElementById(cameraType + '-right');
+                
+                if (leftImg) leftImg.src = `${BASE_URL}/${cameraType}/video_feed_left?t=${timestamp}`;
+                if (rightImg) rightImg.src = `${BASE_URL}/${cameraType}/video_feed_right?t=${timestamp}`;
+            } else {
+                const singleImg = document.getElementById(cameraType + '-single');
+                if (singleImg) singleImg.src = `${BASE_URL}/${cameraType}/video_feed?t=${timestamp}`;
+            }
+        }
+        
+        function clearVideoStreams(cameraType) {
+            const dualCameras = ['f_detector', 'f_tracker'];
+            
+            if (dualCameras.includes(cameraType)) {
+                const leftImg = document.getElementById(cameraType + '-left');
+                const rightImg = document.getElementById(cameraType + '-right');
+                
+                if (leftImg) leftImg.src = 'about:blank';
+                if (rightImg) rightImg.src = 'about:blank';
+            } else {
+                const singleImg = document.getElementById(cameraType + '-single');
+                if (singleImg) singleImg.src = 'about:blank';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,40 +1,24 @@
 """
-特征点检测
+特征点检测 - 使用全局帧缓存获取数据
 """
-'''
-错误原因主要是因为 路障检测系统.py ，前端请求视频流是从左右两个摄像头同时调画面，端口拥挤造成报错。socket 可以直接转为 流式传输 ，问题不大。
-需求：同时接收两个视频流并展示在前端页面
-前提：一个端口只能同时承载一个视频流。
-双端口：
-解决方案1 ： 开两个端口并写两个 返回视频流 函数                   （更改成本更低）
-解决方案2 ： 开两个端口并继承 feature 写 left right 子类
-单端口：
-解决方案1： ？？？ 直接threaded=True 即可？？？？
-
-'''
 import cv2
 import time
 import threading
+import numpy as np
 from utils.video_show import VideoShowOAK
 import depthai as dai
-from flask_socketio import SocketIO
-import base64
-import eventlet
-from flask import Flask, Response
-eventlet.monkey_patch()
-
-app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
-
-from utils.stream_optimizer import get_stream_optimizer
+from .global_frame_cache import get_global_frame_cache
+from utils.device_manager import device_manager
 
 class FeaturePointDetector(VideoShowOAK):
     def __init__(self, camera_size=720, is_show_fps=True, motion_estimation="hardware_accelerated", headless=True):
         super().__init__(camera_size, is_show_fps)
         
         # 全局帧缓存
-        from .global_frame_cache import get_global_frame_cache
         self.global_cache = get_global_frame_cache()
+        
+        # 设备管理器
+        self.device_manager = device_manager
         
         self.motion_estimation = motion_estimation
         self.headless = headless
@@ -43,19 +27,14 @@ class FeaturePointDetector(VideoShowOAK):
         # 帧数据
         self.left_frame = None
         self.right_frame = None
+        self.last_left_frame = None
+        self.last_right_frame = None
+        
+        # 运行状态
         self.processing_active = False
         self.processing_thread = None
         
-        # 特征跟踪配置 - 简化版本，不设置复杂的配置
-        # 由于DepthAI API版本差异，暂时不设置特征跟踪配置
-        # 使用默认配置即可
-        print("⚠️ 使用默认特征跟踪配置")
-        
-        # 绘制器
-        self.leftTracker = FeaturePointTrackerDrawer("Feature count left", "left", headless)
-        self.rightTracker = FeaturePointTrackerDrawer("Feature count right", "right", headless)
-        
-        print("✅ 特征点检测器初始化完成")
+        print("✅ 特征点检测器初始化完成，使用全局帧缓存")
     
     def start(self):
         """启动特征点检测器"""
@@ -65,11 +44,23 @@ class FeaturePointDetector(VideoShowOAK):
         
         print("🚀 启动特征点检测器...")
         
+        # 确保设备管理器正在运行
+        if not self.device_manager.is_running():
+            print("⚠️ 设备管理器未运行，尝试启动...")
+            try:
+                self.device_manager.start()
+                time.sleep(2)  # 等待设备启动
+            except Exception as e:
+                print(f"❌ 启动设备管理器失败: {e}")
+                return
+        
         # 订阅全局帧缓存
         self.global_cache.subscribe("feature_detector", self._on_frame_update)
         
         # 启动处理线程
         self.processing_active = True
+        self.continue_running = True
+        
         if not self.headless:
             self.processing_thread = threading.Thread(target=self._processing_loop, daemon=True)
             self.processing_thread.start()
@@ -135,3 +126,215 @@ class FeaturePointDetector(VideoShowOAK):
                 time.sleep(0.1)
         
         print("🔄 特征点检测器处理循环已结束")
+
+    def run_left(self):
+        """左摄像头视频流生成器"""
+        print("🎥 开始左摄像头特征点检测视频流生成...")
+        
+        # 确保设备管理器正在运行
+        if not self.device_manager.is_running():
+            print("⚠️ 设备管理器未运行，尝试启动...")
+            try:
+                self.device_manager.start()
+                time.sleep(2)
+            except Exception as e:
+                print(f"❌ 启动设备管理器失败: {e}")
+                return
+        
+        while self.continue_running:
+            try:
+                # 从全局帧缓存获取左侧矫正帧
+                current_frames = self.global_cache.get_current_frames(['rectifiedLeft'])
+                
+                if 'rectifiedLeft' not in current_frames or current_frames['rectifiedLeft'] is None:
+                    time.sleep(0.05)
+                    continue
+                
+                frame = current_frames['rectifiedLeft']
+                
+                # 处理帧
+                processed_frame = self._process_left_frame(frame)
+                
+                if processed_frame is not None:
+                    # 编码为JPEG
+                    _, buffer = cv2.imencode('.jpg', processed_frame)
+                    frame_bytes = buffer.tobytes()
+                    
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                else:
+                    # 生成占位符帧
+                    placeholder = self._generate_placeholder_frame("Left Camera - Waiting for data...")
+                    _, buffer = cv2.imencode('.jpg', placeholder)
+                    frame_bytes = buffer.tobytes()
+                    
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                
+                time.sleep(0.03)  # ~30fps
+                
+            except Exception as e:
+                print(f"⚠️ 左摄像头特征点检测错误: {e}")
+                time.sleep(0.1)
+        
+        print("🎥 左摄像头特征点检测视频流生成已停止")
+
+    def run_right(self):
+        """右摄像头视频流生成器"""
+        print("🎥 开始右摄像头特征点检测视频流生成...")
+        
+        # 确保设备管理器正在运行
+        if not self.device_manager.is_running():
+            print("⚠️ 设备管理器未运行，尝试启动...")
+            try:
+                self.device_manager.start()
+                time.sleep(2)
+            except Exception as e:
+                print(f"❌ 启动设备管理器失败: {e}")
+                return
+        
+        while self.continue_running:
+            try:
+                # 从全局帧缓存获取右侧矫正帧
+                current_frames = self.global_cache.get_current_frames(['rectifiedRight'])
+                
+                if 'rectifiedRight' not in current_frames or current_frames['rectifiedRight'] is None:
+                    time.sleep(0.05)
+                    continue
+                
+                frame = current_frames['rectifiedRight']
+                
+                # 处理帧
+                processed_frame = self._process_right_frame(frame)
+                
+                if processed_frame is not None:
+                    # 编码为JPEG
+                    _, buffer = cv2.imencode('.jpg', processed_frame)
+                    frame_bytes = buffer.tobytes()
+                    
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                else:
+                    # 生成占位符帧
+                    placeholder = self._generate_placeholder_frame("Right Camera - Waiting for data...")
+                    _, buffer = cv2.imencode('.jpg', placeholder)
+                    frame_bytes = buffer.tobytes()
+                    
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                
+                time.sleep(0.03)  # ~30fps
+                
+            except Exception as e:
+                print(f"⚠️ 右摄像头特征点检测错误: {e}")
+                time.sleep(0.1)
+        
+        print("🎥 右摄像头特征点检测视频流生成已停止")
+
+    def _process_left_frame(self, frame):
+        """处理左侧帧"""
+        try:
+            if frame is None:
+                return None
+            
+            # 转换为灰度图像进行特征点检测
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame
+            
+            # 使用FAST特征点检测器
+            fast = cv2.FastFeatureDetector_create(threshold=50)
+            keypoints = fast.detect(gray, None)
+            
+            # 在原图上绘制特征点
+            result_frame = cv2.drawKeypoints(frame, keypoints, None, color=(0, 255, 0))
+            
+            # 添加信息文本
+            cv2.putText(result_frame, f"Left Camera - Features: {len(keypoints)}", 
+                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            
+            # 显示帧率
+            result_frame = self.show_fps(result_frame)
+            
+            # 调整图像大小
+            if self.camera_size > 0:
+                new_width = int(self.camera_size * 1280 / 720)
+                new_height = int(self.camera_size)
+                result_frame = cv2.resize(result_frame, (new_width, new_height))
+            
+            self.last_left_frame = result_frame.copy()
+            return result_frame
+            
+        except Exception as e:
+            print(f"❌ 左侧帧处理失败: {e}")
+            return self.last_left_frame
+
+    def _process_right_frame(self, frame):
+        """处理右侧帧"""
+        try:
+            if frame is None:
+                return None
+            
+            # 转换为灰度图像进行特征点检测
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame
+            
+            # 使用FAST特征点检测器
+            fast = cv2.FastFeatureDetector_create(threshold=50)
+            keypoints = fast.detect(gray, None)
+            
+            # 在原图上绘制特征点
+            result_frame = cv2.drawKeypoints(frame, keypoints, None, color=(255, 0, 0))
+            
+            # 添加信息文本
+            cv2.putText(result_frame, f"Right Camera - Features: {len(keypoints)}", 
+                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+            
+            # 显示帧率
+            result_frame = self.show_fps(result_frame)
+            
+            # 调整图像大小
+            if self.camera_size > 0:
+                new_width = int(self.camera_size * 1280 / 720)
+                new_height = int(self.camera_size)
+                result_frame = cv2.resize(result_frame, (new_width, new_height))
+            
+            self.last_right_frame = result_frame.copy()
+            return result_frame
+            
+        except Exception as e:
+            print(f"❌ 右侧帧处理失败: {e}")
+            return self.last_right_frame
+
+    def _generate_placeholder_frame(self, text="Waiting for camera data..."):
+        """生成占位符帧"""
+        try:
+            # 创建占位符图像
+            if self.camera_size > 0:
+                width = int(self.camera_size * 1280 / 720)
+                height = int(self.camera_size)
+            else:
+                width = 1280
+                height = 720
+            
+            placeholder = np.zeros((height, width, 3), dtype=np.uint8)
+            
+            # 添加文本
+            text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+            text_x = (width - text_size[0]) // 2
+            text_y = (height + text_size[1]) // 2
+            
+            cv2.putText(placeholder, text, (text_x, text_y), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            
+            return placeholder
+            
+        except Exception as e:
+            print(f"❌ 生成占位符帧失败: {e}")
+            return np.zeros((720, 1280, 3), dtype=np.uint8)
+
+    def shutdown(self):
+        """安全关闭"""
+        try:
+            self.continue_running = False
+            self.stop()
+            print("✅ 特征点检测器已安全关闭")
+        except Exception as e:
+            print(f"❌ 关闭特征点检测器时出错: {e}")

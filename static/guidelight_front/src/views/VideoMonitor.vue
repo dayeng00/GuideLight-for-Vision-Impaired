@@ -1,59 +1,164 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onUnmounted, onBeforeUnmount, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // @ts-ignore
 import { videoApi } from '../api'
 
-// 摄像头类型
-const cameraTypes = [
+// 定义接口类型
+interface CameraType {
+  id: string
+  name: string
+  hasDual: boolean
+}
+
+// 摄像头类型 - 7个主要视频流
+const cameraTypes: CameraType[] = [
   { id: 'd_estimator', name: '视差估计', hasDual: false },
   { id: 'f_detector', name: '特征点检测', hasDual: true },
   { id: 'f_tracker', name: '特征点追踪', hasDual: true },
   { id: 'g_recognition', name: '手势特征点识别', hasDual: false },
   { id: 'g_recognizer', name: '手势类别判断', hasDual: false },
   { id: 'm_detector', name: 'MobileNetSSD目标检测', hasDual: false },
-  { id: 'p_video', name: '人像追踪', hasDual: false },
-  { id: 's_RGB', name: '空间物体追踪', hasDual: false }
+  { id: 'enhanced_detector', name: '增强检测器', hasDual: false }
 ]
 
-const activeCameraType = ref('f_detector')
-const isLoading = ref(false)
-const isStoppingCamera = ref(false) // 单独跟踪停止摄像头的状态
-const errorMsg = ref('')
-const cameraRunning = ref(false)
+const activeCameraType = ref<string>('enhanced_detector')
+const isLoading = ref<boolean>(false)
+const isStoppingCamera = ref<boolean>(false) // 单独跟踪停止摄像头的状态
+const errorMsg = ref<string>('')
+const cameraRunning = ref<boolean>(false)
 
 // 控制视频流刷新
-const refreshKey = ref(Date.now())
+const refreshKey = ref<number>(Date.now())
 
 // 添加防抖控制
 let isShuttingDown = false
 let lastRequestTime = 0
 const MIN_REQUEST_INTERVAL = 1000 // 最小请求间隔，单位毫秒
 
-// 启动摄像头
-const startCamera = async () => {
+// 新增：帧缓存状态监控
+const frameCacheStatus = ref<any>({})
+const streamStatus = ref<any>({})
+const isMonitoring = ref<boolean>(false)
+
+// 监控定时器
+let monitoringInterval: number | null = null
+
+// 启动状态监控
+const startMonitoring = (): void => {
+  if (isMonitoring.value) return
+  
+  isMonitoring.value = true
+  monitoringInterval = setInterval(async () => {
+    try {
+      // 获取帧缓存状态
+      const cacheResponse = await videoApi.getFrameCacheStatus()
+      frameCacheStatus.value = cacheResponse.data
+      
+      // 获取视频流状态
+      const streamResponse = await videoApi.getStreamsStatus()
+      streamStatus.value = streamResponse.data
+      
+    } catch (error) {
+      console.error('监控状态获取失败:', error)
+    }
+  }, 2000) // 每2秒更新一次
+}
+
+// 停止状态监控
+const stopMonitoring = (): void => {
+  if (!isMonitoring.value) return
+  
+  isMonitoring.value = false
+  if (monitoringInterval) {
+    clearInterval(monitoringInterval)
+    monitoringInterval = null
+  }
+}
+
+// 清空帧缓存
+const clearFrameCache = async (): Promise<void> => {
+  try {
+    await videoApi.clearFrameCache()
+    ElMessage.success('帧缓存已清空')
+    refreshKey.value = Date.now()
+  } catch (error: any) {
+    ElMessage.error('清空帧缓存失败: ' + (error.message || '未知错误'))
+  }
+}
+
+// 重连摄像头
+const reconnectCamera = async (): Promise<void> => {
+  try {
+    // 先停止当前摄像头
+    await stopCamera()
+    
+    // 等待一段时间
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    // 清空帧缓存
+    await clearFrameCache()
+    
+    // 重新启动摄像头
+    await startCamera()
+    
+    ElMessage.success('摄像头重连成功')
+  } catch (error: any) {
+    ElMessage.error('摄像头重连失败: ' + (error.message || '未知错误'))
+  }
+}
+
+// 检查帧缓存健康状态
+const isFrameCacheHealthy = computed(() => {
+  return frameCacheStatus.value?.is_healthy || false
+})
+
+// 获取帧缓存统计信息
+const frameCacheStats = computed(() => {
+  return frameCacheStatus.value?.cache_stats || {}
+})
+
+// 获取当前摄像头的流状态
+const getCurrentStreamStatus = computed(() => {
+  if (!streamStatus.value?.streams) return null
+  return streamStatus.value.streams[activeCameraType.value] || null
+})
+
+// 启动摄像头（改进版）
+const startCamera = async (): Promise<void> => {
   if (isLoading.value) return
   
   isLoading.value = true
   errorMsg.value = ''
   
   try {
+    // 启动状态监控
+    startMonitoring()
+    
     const { data } = await videoApi.startCamera(activeCameraType.value)
     ElMessage.success('摄像头已启动')
     cameraRunning.value = true
     refreshKey.value = Date.now() // 刷新视频流
+    
+    // 等待一段时间让设备初始化
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
   } catch (error: any) {
     errorMsg.value = error.response?.data?.message || error.message || '启动摄像头失败'
     ElMessage.error(errorMsg.value)
+    
+    // 如果启动失败，停止监控
+    stopMonitoring()
   } finally {
     isLoading.value = false
   }
 }
 
-// 停止摄像头
-const stopCamera = async () => {
-
+// 停止摄像头（改进版）
+const stopCamera = async (): Promise<void> => {
+  // @ts-ignore
   window.stop() // 停止所有正在进行的请求和页面加载操作
+  
   // 防抖处理，避免短时间内重复请求
   const now = Date.now()
   if (isShuttingDown || isStoppingCamera.value || now - lastRequestTime < MIN_REQUEST_INTERVAL) {
@@ -66,6 +171,9 @@ const stopCamera = async () => {
   lastRequestTime = now
   errorMsg.value = ''
   isLoading.value = true
+  
+  // 停止状态监控
+  stopMonitoring()
   
   ElMessage({
     message: '正在停止摄像头，请稍候...',
@@ -107,7 +215,7 @@ const stopCamera = async () => {
 }
 
 // 强制停止摄像头（用于当正常停止失败时）
-const forceStopCamera = async () => {
+const forceStopCamera = async (): Promise<void> => {
   if (!errorMsg.value) return
   
   try {
@@ -129,7 +237,7 @@ const forceStopCamera = async () => {
 }
 
 // 切换摄像头类型
-const changeCamera = (type: string) => {
+const changeCamera = (type: string): void => {
   if (cameraRunning.value) {
     ElMessageBox.confirm(
       '切换摄像头类型将停止当前摄像头，是否继续？',
@@ -151,25 +259,49 @@ const changeCamera = (type: string) => {
 }
 
 // 获取视频流URL
-const getVideoUrl = (side?: string) => {
+const getVideoUrl = (side?: string): string => {
   const url = videoApi.getVideoStreamUrl(activeCameraType.value, side)
   return `${url}?t=${refreshKey.value}`
 }
 
 // 获取当前摄像头信息
-const getCurrentCamera = () => {
+const getCurrentCamera = (): CameraType | undefined => {
   return cameraTypes.find(item => item.id === activeCameraType.value)
 }
 
-// 视频加载错误处理
-const handleVideoError = () => {
+// 视频加载错误处理（改进版）
+const handleVideoError = (event: Event): void => {
+  const img = event.target as HTMLImageElement
+  
   if (cameraRunning.value) {
     errorMsg.value = '视频流加载失败，请检查摄像头是否正确连接'
+    
+    // 如果帧缓存不健康，提示用户
+    if (!isFrameCacheHealthy.value) {
+      errorMsg.value += '，帧缓存状态异常'
+    }
+    
+    // 自动重试机制
+    setTimeout(() => {
+      if (cameraRunning.value && img) {
+        img.src = getVideoUrl(img.dataset.side)
+      }
+    }, 3000)
   }
 }
 
+// 组件挂载时启动监控
+onMounted(() => {
+  if (cameraRunning.value) {
+    startMonitoring()
+  }
+})
+
 // 使用 beforeUnmount 而不是 unMounted 来确保在页面刷新前处理好关闭操作
 onBeforeUnmount(async () => {
+  // 停止监控
+  stopMonitoring()
+  
   if (cameraRunning.value && !isShuttingDown && !isStoppingCamera.value) {
     console.log('组件即将卸载，停止摄像头')
     try {
@@ -213,7 +345,74 @@ onBeforeUnmount(async () => {
               >
                 强制停止
               </el-button>
+              <el-button 
+                v-if="cameraRunning" 
+                type="info" 
+                @click="reconnectCamera"
+                :loading="isLoading"
+              >
+                重连摄像头
+              </el-button>
+              <el-button 
+                type="primary" 
+                @click="clearFrameCache"
+                size="small"
+              >
+                清空缓存
+              </el-button>
             </div>
+          </div>
+          
+          <!-- 状态监控面板 -->
+          <div v-if="isMonitoring" class="status-panel">
+            <el-row :gutter="10">
+              <el-col :span="8">
+                <el-card class="status-card">
+                  <div class="status-item">
+                    <span class="status-label">帧缓存状态:</span>
+                    <el-tag :type="isFrameCacheHealthy ? 'success' : 'danger'">
+                      {{ isFrameCacheHealthy ? '健康' : '异常' }}
+                    </el-tag>
+                  </div>
+                  <div class="status-item">
+                    <span class="status-label">当前FPS:</span>
+                    <span>{{ frameCacheStats.current_fps?.toFixed(1) || '0' }}</span>
+                  </div>
+                  <div class="status-item">
+                    <span class="status-label">缓存命中:</span>
+                    <span>{{ frameCacheStats.cache_hits || 0 }}</span>
+                  </div>
+                </el-card>
+              </el-col>
+              <el-col :span="8">
+                <el-card class="status-card">
+                  <div class="status-item">
+                    <span class="status-label">当前流状态:</span>
+                    <el-tag :type="getCurrentStreamStatus?.running ? 'success' : 'info'">
+                      {{ getCurrentStreamStatus?.running ? '运行中' : '未运行' }}
+                    </el-tag>
+                  </div>
+                  <div class="status-item">
+                    <span class="status-label">处理器类型:</span>
+                    <span>{{ getCurrentStreamStatus?.type || '未知' }}</span>
+                  </div>
+                </el-card>
+              </el-col>
+              <el-col :span="8">
+                <el-card class="status-card">
+                  <div class="status-item">
+                    <span class="status-label">设备管理器:</span>
+                    <el-tag :type="streamStatus.device_manager?.running ? 'success' : 'warning'">
+                      {{ streamStatus.device_manager?.running ? '运行中' : '未运行' }}
+                    </el-tag>
+                  </div>
+                  <div class="status-item">
+                    <span class="status-label">活跃流数:</span>
+                    <span>{{ streamStatus.thread_manager?.active_streams || 0 }}</span>
+                  </div>
+                </el-card>
+              </el-col>
+            </el-row>
           </div>
           
           <el-alert
@@ -246,9 +445,14 @@ onBeforeUnmount(async () => {
           <template #header>
             <div class="video-header">
               <h3>{{ getCurrentCamera()?.name || '视频监控' }}</h3>
-              <el-tag :type="cameraRunning ? 'success' : 'info'">
-                {{ cameraRunning ? '已连接' : '未连接' }}
-              </el-tag>
+              <div class="status-indicators">
+                <el-tag :type="cameraRunning ? 'success' : 'info'">
+                  {{ cameraRunning ? '已连接' : '未连接' }}
+                </el-tag>
+                <el-tag v-if="isMonitoring" :type="isFrameCacheHealthy ? 'success' : 'danger'" class="ml-10">
+                  缓存{{ isFrameCacheHealthy ? '正常' : '异常' }}
+                </el-tag>
+              </div>
             </div>
           </template>
           
@@ -268,6 +472,7 @@ onBeforeUnmount(async () => {
                     :src="getVideoUrl('left')" 
                     alt="左摄像头" 
                     class="video-stream"
+                    :data-side="'left'"
                     @error="handleVideoError"
                   />
                 </div>
@@ -277,6 +482,7 @@ onBeforeUnmount(async () => {
                     :src="getVideoUrl('right')" 
                     alt="右摄像头" 
                     class="video-stream"
+                    :data-side="'right'"
                     @error="handleVideoError"
                   />
                 </div>
@@ -335,8 +541,8 @@ onBeforeUnmount(async () => {
               检测并追踪视野中的人像，帮助盲人感知周围的人。
             </el-descriptions-item>
             
-            <el-descriptions-item v-if="activeCameraType === 's_RGB'" label="空间物体追踪">
-              在三维空间中追踪物体，提供更准确的物体位置信息。
+            <el-descriptions-item v-if="activeCameraType === 'enhanced_detector'" label="增强检测器">
+              结合深度信息和YOLO目标检测的增强版检测器，支持碰撞预警功能。
             </el-descriptions-item>
           </el-descriptions>
         </el-card>
@@ -427,5 +633,31 @@ onBeforeUnmount(async () => {
   display: block;
   margin: 0 auto;
   max-height: 500px;
+}
+
+/* 新增样式 */
+.status-panel {
+  margin-bottom: 20px;
+}
+
+.status-card {
+  margin-bottom: 10px;
+}
+
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.status-label {
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+.status-indicators {
+  display: flex;
+  align-items: center;
 }
 </style> 
